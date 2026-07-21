@@ -1,0 +1,31 @@
+{
+  "type": "champion",
+  "format": "standAloneComplex",
+  "version": "16.14.1",
+  "data": {
+    "Aatrox": {
+      "id": "Aatrox",
+      "key": "266",
+      "name": "Aatrox",
+      "title": "the Darkin Blade",
+      "tags": ["Fighter"],
+      "partype": "Blood Well"
+    },
+    "Ahri": {
+      "id": "Ahri",
+      "key": "103",
+      "name": "Ahri",
+      "title": "the Nine-Tailed Fox",
+      "tags": ["Mage", "Assassin"],
+      "partype": "Mana"
+    },
+    "Jinx": {
+      "id": "Jinx",
+      "key": "222",
+      "name": "Jinx",
+      "title": "the Loose Cannon",
+      "tags": ["Marksman"],
+      "partype": "Mana"
+    }
+  }
+}

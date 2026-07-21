@@ -1,0 +1,89 @@
+{
+  "Aatrox": {
+    "lore": "Once honored defenders of Shurima against the Void, Aatrox and his brethren would eventually become an even greater threat to Runeterra, and were defeated only by cunning mortal sorcery. But after centuries of imprisonment, Aatrox was the first to find freedom once more, corrupting and transforming those foolish enough to try and wield the magical weapon that contained his essence. Now, with stolen flesh, he walks Runeterra in a brutal approximation of his previous form, seeking an apocalyptic and long overdue vengeance.",
+    "passive": {
+      "name": "Deathbringer Stance",
+      "description": "Periodically, Aatrox's next basic attack deals bonus magic damage and heals him, based on the target's max health."
+    },
+    "spells": [
+      {
+        "id": "AatroxQ",
+        "name": "The Darkin Blade",
+        "description": "Aatrox slams his greatsword down, dealing physical damage. He can swing three times, each with a different area of effect."
+      },
+      {
+        "id": "AatroxW",
+        "name": "Infernal Chains",
+        "description": "Aatrox smashes the ground, dealing damage to the first enemy hit. Champions and large monsters have to leave the impact area quickly or they will be dragged to the center and take the damage again."
+      },
+      {
+        "id": "AatroxE",
+        "name": "Umbral Dash",
+        "description": "Passively, Aatrox heals when damaging enemy champions. On activation, he dashes in a direction."
+      },
+      {
+        "id": "AatroxR",
+        "name": "World Ender",
+        "description": "Aatrox unleashes his demonic form, fearing nearby enemy minions and gaining attack damage, increased healing, and Move Speed. If he gets a takedown, this effect is extended."
+      }
+    ]
+  },
+  "Ahri": {
+    "lore": "Innately connected to the magic of the spirit realm, Ahri is a fox-like vastaya who can manipulate her prey's emotions and consume their essence, receiving flashes of their memory and insight from each soul she consumes. Once a powerful yet wayward predator, Ahri is now traveling the world in search of remnants of her ancestors while also trying to replace her stolen memories with ones of her own making.",
+    "passive": {
+      "name": "Essence Theft",
+      "description": "After killing 9 minions or monsters, Ahri heals. After taking down an enemy champion, Ahri heals for a greater amount."
+    },
+    "spells": [
+      {
+        "id": "AhriQ",
+        "name": "Orb of Deception",
+        "description": "Ahri sends out and pulls back her orb, dealing magic damage on the way out and true damage on the way back."
+      },
+      {
+        "id": "AhriW",
+        "name": "Fox-Fire",
+        "description": "Ahri gains a brief burst of Move Speed and releases three fox-fires, that lock onto and attack nearby enemies."
+      },
+      {
+        "id": "AhriE",
+        "name": "Charm",
+        "description": "Ahri blows a kiss that damages and charms an enemy it encounters, instantly stopping movement abilities and causing them to walk harmlessly towards her."
+      },
+      {
+        "id": "AhriR",
+        "name": "Spirit Rush",
+        "description": "Ahri dashes forward and fires essence bolts, damaging nearby enemies. Spirit Rush can be cast up to three times before going on cooldown, and gains additional recasts when taking down enemy champions."
+      }
+    ]
+  },
+  "Jinx": {
+    "lore": "An unhinged and impulsive criminal from the undercity, Jinx is haunted by the consequences of her past, but that doesn't stop her from bringing her own chaotic brand of pandemonium to Piltover and Zaun. She uses her arsenal of DIY weapons to devastating effect, unleashing torrents of colorful explosions and gunfire, inspiring the disenfranchised to rebellion and resistance with the mayhem she leaves in her wake.",
+    "passive": {
+      "name": "Get Excited!",
+      "description": "Jinx receives massively increased Move Speed and Attack Speed whenever she helps kill or destroy an enemy champions epic jungle monster, or structure."
+    },
+    "spells": [
+      {
+        "id": "JinxQ",
+        "name": "Switcheroo!",
+        "description": "Jinx modifies her basic attacks by swapping between Pow-Pow, her minigun and Fishbones, her rocket launcher. Attacks with Pow-Pow grant Attack Speed, while attacks with Fishbones deal area of effect damage, gain increased range, but drain Mana and attack slower."
+      },
+      {
+        "id": "JinxW",
+        "name": "Zap!",
+        "description": "Jinx uses Zapper, her shock pistol, to fire a blast that deals damage to the first enemy hit, slowing and revealing it."
+      },
+      {
+        "id": "JinxE",
+        "name": "Flame Chompers!",
+        "description": "Jinx throws out a line of snare grenades that explode after 5 seconds, lighting enemies on fire. Flame Chompers will bite enemy champions who walk over them, rooting them in place."
+      },
+      {
+        "id": "JinxR",
+        "name": "Super Mega Death Rocket!",
+        "description": "Jinx fires a super rocket across the map that gains damage as it travels. The rocket will explode upon colliding with an enemy champion, dealing damage to it and surrounding enemies based on their missing Health."
+      }
+    ]
+  }
+}
