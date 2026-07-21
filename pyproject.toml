@@ -1,0 +1,42 @@
+[project]
+name = "lolrag"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "chromadb>=1.5.9",
+    "httpx>=0.28.1",
+    "langchain-chroma>=1.1.0",
+    "langchain-classic>=1.0.8",
+    "langchain-community>=0.4.2",
+    "langchain-core>=1.5.0",
+    "langchain-google-genai>=4.2.7",
+    "langchain-huggingface>=1.2.2",
+    "langchain-text-splitters>=1.1.2",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14.2",
+    "sentence-transformers>=5.6.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.pytest.ini_options]
+markers = ["integration: requires network and API keys"]
+addopts = "-m 'not integration'"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "ruff>=0.15.22",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["lolrag"]
