@@ -102,20 +102,28 @@ def _build_prompt() -> ChatPromptTemplate:
 
 
 @lru_cache
-def get_llm(model_name: str, fallback_model_name: str, temperature: float, api_key: str | None) -> Runnable:
+def get_llm(
+    model_name: str, fallback_model_name: str, temperature: float, api_key: str | None
+) -> Runnable:
     """Return a process-wide cached chat model with a fallback configured.
 
     Args:
         model_name: Primary Gemini chat model identifier.
         fallback_model_name: Gemini chat model identifier used if the primary fails.
         temperature: Sampling temperature applied to both models.
+        api_key: Gemini API key passed to both models, or None to defer to the
+            GOOGLE_API_KEY environment variable.
 
     Returns:
         Runnable that invokes model_name and falls back to fallback_model_name
-        on failure, cached per unique (model_name, fallback_model_name, temperature).
+        on failure, cached per unique argument combination.
     """
-    primary = ChatGoogleGenerativeAI(model=model_name, temperature=temperature, google_api_key=api_key)
-    fallback = ChatGoogleGenerativeAI(model=fallback_model_name, temperature=temperature, google_api_key=api_key)
+    primary = ChatGoogleGenerativeAI(
+        model=model_name, temperature=temperature, google_api_key=api_key
+    )
+    fallback = ChatGoogleGenerativeAI(
+        model=fallback_model_name, temperature=temperature, google_api_key=api_key
+    )
     return primary.with_fallbacks([fallback])
 
 
@@ -140,7 +148,7 @@ def generate(question: str, documents: list[Document], settings: Settings) -> st
         settings.google_api_key.get_secret_value() if settings.google_api_key else None,
     )
     response = llm.invoke(messages)
-    return str(response.content)
+    return str(response.text)
 
 
 def answer_question(question: str, settings: Settings) -> RagResponse:
