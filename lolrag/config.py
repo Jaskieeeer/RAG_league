@@ -24,6 +24,7 @@ class Settings(BaseSettings):
         langsmith_project: LangSmith project name traces are grouped under.
         eval_judge_model_name: Gemini chat model identifier used by the faithfulness judge.
         eval_report_dir: Filesystem path where evaluation reports are written.
+        database_url: SQLAlchemy connection URL for the Postgres/pgvector database.
     """
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="forbid")
@@ -49,6 +50,8 @@ class Settings(BaseSettings):
     langsmith_project: str = "lolrag-eval"
     eval_judge_model_name: str = "gemini-3.5-flash"
     eval_report_dir: str = "./eval_reports"
+
+    database_url: str = "postgresql+psycopg://lolrag:lolrag@localhost:5432/lolrag"
 
 
 @lru_cache

@@ -2,8 +2,8 @@
 
 ## What this project is
 
-A production-grade RAG application over League of Legends data (Data Dragon JSON +
-LoL wiki via MediaWiki API). Portfolio project: the goal is code the author fully
+A production-grade RAG application over League of Legends data (Riot first-party
+JSON APIs). Portfolio project: the goal is code the author fully
 understands and can defend in an interview. Built in phases; do not implement a
 later phase before the current one is complete and tested.
 
@@ -35,7 +35,7 @@ technique at a time. Rules of the roadmap:
 - Upgrade queue, roughly in order: multi-query / RAG-fusion with RRF;
   hybrid search (BM25 + dense, fused with RRF); metadata query construction
   (patch/champion/class filters via structured output); logical routing
-  between collections (gameplay vs lore vs patches); multi-representation
+  between collections (abilities vs equipment vs lore); multi-representation
   indexing for long lore pages; cross-encoder re-ranking; HyDE if evals
   show question/passage vocabulary mismatch.
 - One technique per iteration. Never stack two unevaluated changes.
@@ -44,14 +44,19 @@ technique at a time. Rules of the roadmap:
 
 - Python 3.13, uv for dependency management (`uv add`, never pip install)
 - LangChain 1.x: imports come from `langchain_core`, `langchain_classic`,
-  `langchain_community`, `langchain_chroma`, `langchain_huggingface`,
+  `langchain_community`, `langchain_postgres`, `langchain_huggingface`,
   `langchain_google_genai`, `langchain_text_splitters`. Never import from
   legacy paths like `langchain.prompts` — they do not exist in 1.x.
 - LLM: Gemini via `ChatGoogleGenerativeAI` (default `gemini-3.5-flash`,
   fallback `gemini-3.1-flash-lite`). Model name always from config, never hardcoded.
 - Embeddings: `HuggingFaceEmbeddings` (all-MiniLM-L6-v2) unless config says otherwise.
-- Vector store: Chroma (persistent client). Deterministic document ids derived from
-  content+source hash so re-ingestion upserts instead of duplicating.
+- Datastore: PostgreSQL with the `pgvector` extension — one store for both
+  structured entity rows and embeddings, so metadata filters and vector ranking
+  compose in a single SQL statement. Access via SQLAlchemy 2.0 ORM, migrations
+  via Alembic, local dev via Docker Compose. Deterministic document ids derived
+  from content+source hash so re-ingestion upserts instead of duplicating.
+  Note: Postgres full-text search ranks with `ts_rank`, which is not BM25 —
+  true BM25 needs the `pg_search` extension or an in-memory implementation.
 - Backend: FastAPI + pydantic v2. Frontend: React + Vite. Tests: pytest.
 
 ## The author is learning
@@ -93,14 +98,27 @@ The human is rebuilding hands-on coding skill. Therefore:
 - Secrets only via environment / GCP Secret Manager. If a key ever appears in
   code or git history, stop and tell the human immediately.
 - Request/response logging without logging secrets or full user IPs (truncate).
+- The `docker-compose.yml` Postgres credentials (`lolrag`/`lolrag`) are a local-dev
+  default only. Before any deployed environment (Phase 5+), rotate to a strong,
+  generated password sourced from GCP Secret Manager — never reuse the dev
+  credential outside a developer's own machine.
 
 ## Data sources
 
-- Data Dragon (versioned JSON: champions, items, runes) — primary, no scraping.
-- LoL wiki via MediaWiki `api.php` — polite rate limiting, User-Agent set,
-  respect robots and ToS. Content is CC BY-SA: attribution goes in the README
-  and the frontend footer, along with Riot's fan-project disclaimer.
+All corpus content comes from Riot first-party JSON APIs. No scraping.
+
+- Data Dragon (`ddragon.leagueoflegends.com`) — versioned JSON: champions,
+  abilities, items, runes, summoner spells.
+- Community Dragon (`raw.communitydragon.org`) — richer champion data:
+  tactical and playstyle metadata, full ability tooltips.
+- Riot Universe (`universe-meeps.leagueoflegends.com`) — champion biographies,
+  faction pages, long-form stories. Enumerate via `search/index.json`; the
+  other `*/index.json` hub endpoints return 403.
+- The LoL wiki is NOT used. Its robots.txt disallows `api.php` for all agents
+  and blocks AI crawlers site-wide. Do not reopen this without amending this
+  file first, so the repo never claims a principle its code violates.
 - Raw HTML scraping is a last resort and requires explicit human approval.
+- Riot's fan-project disclaimer goes in the README and the frontend footer.
 
 ## Commands
 
@@ -112,7 +130,7 @@ The human is rebuilding hands-on coding skill. Therefore:
 
 - Small, single-purpose commits; imperative mood messages ("Add rate limiter",
   not "Added"/"adding stuff").
-- Never commit: `.env`, Chroma persistence directories, model caches,
+- Never commit: `.env`, Postgres data volumes, model caches,
   `node_modules`, build artifacts.
 - The human reviews every diff before it is committed. Do not auto-commit
   unless explicitly told to.
