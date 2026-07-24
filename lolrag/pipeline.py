@@ -66,7 +66,7 @@ def retrieve(question: str, settings: Settings) -> list[Document]:
     return retriever.invoke(question)
 
 
-def _format_context(documents: list[Document]) -> str:
+def format_context(documents: list[Document]) -> str:
     """Join retrieved documents into a single text block for the prompt context.
 
     Args:
@@ -140,7 +140,7 @@ def generate(question: str, documents: list[Document], settings: Settings) -> st
         Generated answer text.
     """
     prompt = _build_prompt()
-    messages = prompt.format_messages(context=_format_context(documents), question=question)
+    messages = prompt.format_messages(context=format_context(documents), question=question)
     llm = get_llm(
         settings.llm_model_name,
         settings.llm_fallback_model_name,

@@ -12,6 +12,7 @@ dependencies = [
     "langchain-google-genai>=4.2.7",
     "langchain-huggingface>=1.2.2",
     "langchain-text-splitters>=1.1.2",
+    "langsmith>=0.10.9",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "sentence-transformers>=5.6.0",
@@ -26,8 +27,11 @@ target-version = "py313"
 select = ["E", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
-markers = ["integration: requires network and API keys"]
-addopts = "-m 'not integration'"
+markers = [
+    "integration: requires network and API keys",
+    "eval: runs the evaluation harness against the real corpus and LLM (needs GOOGLE_API_KEY and a built index)",
+]
+addopts = "-m 'not integration and not eval'"
 
 [build-system]
 requires = ["hatchling"]

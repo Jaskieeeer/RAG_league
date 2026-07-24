@@ -1,0 +1,128 @@
+{
+  "description": "Golden evaluation dataset for the LoL Knowledge RAG. Each entry pairs a natural-language question with the champion_ids whose corpus document should be retrieved to answer it. Authored by hand against the Data Dragon champion corpus. 'factual' questions have a supported answer in the corpus; 'refusal' questions name a champion the retriever should still find, but ask for numeric data (damage, cooldowns) the corpus does not contain, so a faithful answer must decline rather than fabricate.",
+  "version": 1,
+  "questions": [
+    {
+      "id": "q01",
+      "question": "Which champion is a Darkin warrior sealed inside a living sword who seeks to bring about the end of the world?",
+      "expected_champion_ids": ["Aatrox"],
+      "category": "factual"
+    },
+    {
+      "id": "q02",
+      "question": "Which champion is a nine-tailed fox who charms her enemies and feeds on their essence?",
+      "expected_champion_ids": ["Ahri"],
+      "category": "factual"
+    },
+    {
+      "id": "q03",
+      "question": "Which manic criminal from Zaun wields a minigun and a rocket launcher and causes chaos wherever she goes?",
+      "expected_champion_ids": ["Jinx"],
+      "category": "factual"
+    },
+    {
+      "id": "q04",
+      "question": "Which Demacian champion spins his sword in a circle and executes weakened enemies with Demacian Justice?",
+      "expected_champion_ids": ["Garen"],
+      "category": "factual"
+    },
+    {
+      "id": "q05",
+      "question": "Which Noxian champion pulls enemies toward him with his axe and executes them with a guillotine?",
+      "expected_champion_ids": ["Darius"],
+      "category": "factual"
+    },
+    {
+      "id": "q06",
+      "question": "Which light mage from Demacia fires a giant beam of light called Final Spark?",
+      "expected_champion_ids": ["Lux"],
+      "category": "factual"
+    },
+    {
+      "id": "q07",
+      "question": "Which champion is a blind monk who fights with his fists and feet?",
+      "expected_champion_ids": ["LeeSin"],
+      "category": "factual"
+    },
+    {
+      "id": "q08",
+      "question": "Which frost archer fires an Enchanted Crystal Arrow that can stun a target from across the map?",
+      "expected_champion_ids": ["Ashe"],
+      "category": "factual"
+    },
+    {
+      "id": "q09",
+      "question": "Which champion is a living boulder that charges into enemies as an Unstoppable Force?",
+      "expected_champion_ids": ["Malphite"],
+      "category": "factual"
+    },
+    {
+      "id": "q10",
+      "question": "Which champion from Zaun can rewind time to heal himself and escape danger?",
+      "expected_champion_ids": ["Ekko"],
+      "category": "factual"
+    },
+    {
+      "id": "q11",
+      "question": "Which steam-powered golem grabs enemies from a distance with a rocket-powered fist?",
+      "expected_champion_ids": ["Blitzcrank"],
+      "category": "factual"
+    },
+    {
+      "id": "q12",
+      "question": "Which ancient guardian with the head of a jackal grows permanently stronger by stacking Siphoning Strike?",
+      "expected_champion_ids": ["Nasus"],
+      "category": "factual"
+    },
+    {
+      "id": "q13",
+      "question": "Which swift scout yordle plants poisonous mushrooms and can blind his enemies?",
+      "expected_champion_ids": ["Teemo"],
+      "category": "factual"
+    },
+    {
+      "id": "q14",
+      "question": "Which exiled swordsman can block all incoming projectiles with a wall of wind?",
+      "expected_champion_ids": ["Yasuo"],
+      "category": "factual"
+    },
+    {
+      "id": "q15",
+      "question": "Which champion is the Chain Warden, who hooks enemies with a scythe and collects the souls of the dead?",
+      "expected_champion_ids": ["Thresh"],
+      "category": "factual"
+    },
+    {
+      "id": "q16",
+      "question": "Which master of shadows creates living shadow clones to duel his enemies?",
+      "expected_champion_ids": ["Zed"],
+      "category": "factual"
+    },
+    {
+      "id": "q17",
+      "question": "Which assassin known as the Sinister Blade resets her abilities whenever she scores a takedown?",
+      "expected_champion_ids": ["Katarina"],
+      "category": "factual"
+    },
+    {
+      "id": "q18",
+      "question": "Which fallen angel shields her allies from magic damage and binds nearby enemies with chains?",
+      "expected_champion_ids": ["Morgana"],
+      "category": "factual"
+    },
+    {
+      "id": "q19",
+      "question": "How much damage does Jinx's ultimate ability deal at maximum rank?",
+      "expected_champion_ids": ["Jinx"],
+      "category": "refusal",
+      "notes": "The corpus describes abilities as prose only; it contains no damage numbers. A faithful answer must state the exact figure is not available, not invent one."
+    },
+    {
+      "id": "q20",
+      "question": "What is the exact cooldown in seconds of Garen's ultimate ability?",
+      "expected_champion_ids": ["Garen"],
+      "category": "refusal",
+      "notes": "No cooldown numbers exist in the corpus. A faithful answer must decline to give a specific number."
+    }
+  ]
+}

@@ -19,6 +19,11 @@ class Settings(BaseSettings):
         llm_model_name: Gemini chat model identifier.
         llm_fallback_model_name: Gemini chat model identifier used as fallback.
         llm_temperature: Sampling temperature for the LLM.
+        langsmith_tracing: Whether to enable LangSmith tracing at runtime.
+        langsmith_api_key: LangSmith API key, kept out of logs and reprs.
+        langsmith_project: LangSmith project name traces are grouped under.
+        eval_judge_model_name: Gemini chat model identifier used by the faithfulness judge.
+        eval_report_dir: Filesystem path where evaluation reports are written.
     """
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="forbid")
@@ -38,6 +43,12 @@ class Settings(BaseSettings):
     llm_model_name: str = "gemini-3.5-flash"
     llm_fallback_model_name: str = "gemini-3.1-flash-lite"
     llm_temperature: float = 0.0
+
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = "lolrag-eval"
+    eval_judge_model_name: str = "gemini-3.5-flash"
+    eval_report_dir: str = "./eval_reports"
 
 
 @lru_cache

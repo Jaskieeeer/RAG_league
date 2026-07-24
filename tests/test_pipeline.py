@@ -4,7 +4,7 @@ from pydantic import ValidationError
 
 from lolrag.config import Settings
 from lolrag.indexing import build_index
-from lolrag.pipeline import RagResponse, SourceDocument, _format_context, answer_question, retrieve
+from lolrag.pipeline import RagResponse, SourceDocument, answer_question, format_context, retrieve
 from tests.test_ingestion import build_documents
 
 
@@ -16,7 +16,7 @@ def test_format_context_includes_document_content():
         )
     ]
 
-    context = _format_context(documents)
+    context = format_context(documents)
 
     assert "Aatrox is a darkin blade." in context
 
@@ -29,7 +29,7 @@ def test_format_context_includes_champion_name():
         )
     ]
 
-    context = _format_context(documents)
+    context = format_context(documents)
 
     assert "Ahri" in context
 
@@ -39,7 +39,7 @@ def test_format_context_handles_single_document():
         Document(page_content="Jinx loves chaos.", metadata={"name": "Jinx", "source": "s1"})
     ]
 
-    context = _format_context(documents)
+    context = format_context(documents)
 
     assert context == "Jinx: Jinx loves chaos."
 
@@ -50,7 +50,7 @@ def test_format_context_handles_multiple_documents_distinctly():
         Document(page_content="Ahri content.", metadata={"name": "Ahri", "source": "s2"}),
     ]
 
-    context = _format_context(documents)
+    context = format_context(documents)
 
     assert "Aatrox content." in context
     assert "Ahri content." in context
@@ -59,7 +59,7 @@ def test_format_context_handles_multiple_documents_distinctly():
 def test_format_context_falls_back_to_source_when_name_missing():
     documents = [Document(page_content="Some lore text.", metadata={"source": "wiki:lore:1"})]
 
-    context = _format_context(documents)
+    context = format_context(documents)
 
     assert context == "wiki:lore:1: Some lore text."
 
