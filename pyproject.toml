@@ -37,6 +37,7 @@ markers = [
     "eval: runs the evaluation harness against the real corpus and LLM (needs GOOGLE_API_KEY and a built index)",
 ]
 addopts = "-m 'not integration and not eval'"
+asyncio_mode = "auto"
 
 [build-system]
 requires = ["hatchling"]
@@ -45,6 +46,7 @@ build-backend = "hatchling.build"
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.15.22",
 ]
 

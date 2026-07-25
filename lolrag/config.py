@@ -11,6 +11,14 @@ class Settings(BaseSettings):
         ddragon_version: Pinned Data Dragon patch version, e.g. "16.14.1".
         ddragon_locale: Data Dragon locale code.
         ddragon_base_url: Data Dragon CDN root URL.
+        cdragon_base_url: Community Dragon raw asset root URL.
+        universe_base_url: Riot Universe JSON API root URL, including locale segment.
+        cache_dir: Filesystem path for the on-disk raw response cache.
+        http_user_agent: User-Agent header sent with every corpus fetch.
+        http_concurrency: Maximum number of in-flight corpus requests.
+        http_delay_seconds: Delay applied before each request inside the concurrency limit.
+        http_timeout_seconds: Per-request timeout for corpus fetches.
+        http_max_retries: Maximum attempts per request before giving up.
         embedding_model_name: HuggingFace embedding model identifier.
         chroma_persist_dir: Filesystem path for the persistent Chroma store.
         chroma_collection_name: Chroma collection name.
@@ -32,6 +40,15 @@ class Settings(BaseSettings):
     ddragon_version: str
     ddragon_locale: str = "en_US"
     ddragon_base_url: str = "https://ddragon.leagueoflegends.com"
+    cdragon_base_url: str = "https://raw.communitydragon.org"
+    universe_base_url: str = "https://universe-meeps.leagueoflegends.com/v1/en_us"
+
+    cache_dir: str = "./data/cache"
+    http_user_agent: str = "lolrag/0.1 (+https://github.com/Jaskieeeer)"
+    http_concurrency: int = 5
+    http_delay_seconds: float = 0.1
+    http_timeout_seconds: float = 30.0
+    http_max_retries: int = 3
 
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
 
