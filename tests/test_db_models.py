@@ -18,7 +18,9 @@ from lolrag.db.models import (
     Rune,
     RunePath,
     Story,
+    SummonerSpell,
     champion_related,
+    item_components,
 )
 
 _EXPECTED_TABLES = {
@@ -182,6 +184,38 @@ def test_item_components_and_builds_into_are_populated_in_both_directions(
     assert set(parent.components) == {component_one, component_two}
     assert parent in component_one.builds_into
     assert parent in component_two.builds_into
+
+
+def test_item_component_quantity_defaults_to_one(db_session: Session) -> None:
+    """A link written through the relationship gets quantity 1 from the server default."""
+    parent = _make_item(db_session, "9201")
+    component = _make_item(db_session, "9202")
+    parent.components = [component]
+    db_session.flush()
+
+    quantity = db_session.execute(
+        select(item_components.c.quantity).where(item_components.c.item_id == "9201")
+    ).scalar_one()
+    assert quantity == 1
+
+
+def test_item_component_quantity_records_a_doubled_component(db_session: Session) -> None:
+    """One association row can record a recipe consuming two copies of a component."""
+    _make_item(db_session, "9203")
+    _make_item(db_session, "9204")
+    db_session.execute(
+        item_components.insert().values(item_id="9203", component_id="9204", quantity=2)
+    )
+    db_session.flush()
+    db_session.expire_all()
+
+    parent = db_session.get(Item, "9203")
+    assert parent is not None
+    assert [component.ddragon_id for component in parent.components] == ["9204"]
+    quantity = db_session.execute(
+        select(item_components.c.quantity).where(item_components.c.item_id == "9203")
+    ).scalar_one()
+    assert quantity == 2
 
 
 def test_rune_row_index_and_position_index_persist(db_session: Session) -> None:
@@ -578,3 +612,25 @@ def test_story_subsection_count_persists(db_session: Session) -> None:
     stored = db_session.get(Story, "test-story-subsection-count")
     assert stored is not None
     assert stored.subsection_count == 7
+
+
+def test_summoner_spell_long_id_and_fractional_cooldown_round_trip(db_session: Session) -> None:
+    """The longest Data Dragon spell id and a sub-second cooldown survive a round trip."""
+    spell_id = "Summoner_UltBookSmitePlaceholder"
+    spell = SummonerSpell(
+        id=spell_id,
+        key="55",
+        name="Test Spell",
+        description="Test description",
+        description_text="Test description",
+        cooldown=0.25,
+        summoner_level=1,
+    )
+    db_session.add(spell)
+    db_session.flush()
+    db_session.expire_all()
+
+    stored = db_session.get(SummonerSpell, spell_id)
+    assert stored is not None
+    assert len(spell_id) == 32
+    assert stored.cooldown == 0.25

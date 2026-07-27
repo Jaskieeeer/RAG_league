@@ -7,6 +7,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Integer,
     String,
     Table,
     Text,
@@ -56,6 +57,7 @@ item_components = Table(
     Base.metadata,
     Column("item_id", ForeignKey("items.ddragon_id", ondelete="CASCADE"), primary_key=True),
     Column("component_id", ForeignKey("items.ddragon_id", ondelete="CASCADE"), primary_key=True),
+    Column("quantity", Integer, nullable=False, server_default="1"),
 )
 
 
@@ -413,18 +415,18 @@ class SummonerSpell(Base):
         description: Summoner spell description.
         description_text: Markup-stripped form of description, used for
             embedding.
-        cooldown: Cooldown in seconds, nullable.
+        cooldown: Cooldown in seconds as a float, nullable.
         summoner_level: Minimum summoner level required, nullable.
     """
 
     __tablename__ = "summoner_spells"
 
-    id: Mapped[str] = mapped_column(String(16), primary_key=True)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
     key: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[str] = mapped_column(Text)
     description_text: Mapped[str] = mapped_column(Text)
-    cooldown: Mapped[int | None] = mapped_column(nullable=True)
+    cooldown: Mapped[float | None] = mapped_column(Float, nullable=True)
     summoner_level: Mapped[int | None] = mapped_column(nullable=True)
 
 
@@ -530,7 +532,7 @@ class Document(Base):
         ForeignKey("runes.id", ondelete="CASCADE"), nullable=True
     )
     summoner_spell_id: Mapped[str | None] = mapped_column(
-        ForeignKey("summoner_spells.id", ondelete="CASCADE"), nullable=True
+        String(64), ForeignKey("summoner_spells.id", ondelete="CASCADE"), nullable=True
     )
 
     title: Mapped[str] = mapped_column(String(256))
