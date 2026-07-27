@@ -4,6 +4,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     CheckConstraint,
     Column,
+    Float,
     ForeignKey,
     Index,
     String,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -157,6 +159,7 @@ class Ability(Base):
         tooltip: Ability tooltip text, nullable.
         tooltip_text: Markup-stripped form of tooltip, used for embedding,
             nullable.
+        max_rank: Number of rank-up levels for this ability; NULL for passives.
     """
 
     __tablename__ = "abilities"
@@ -172,8 +175,12 @@ class Ability(Base):
     description: Mapped[str] = mapped_column(Text)
     tooltip: Mapped[str | None] = mapped_column(Text, nullable=True)
     tooltip_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    max_rank: Mapped[int | None] = mapped_column(nullable=True)
 
     champion: Mapped["Champion"] = relationship(back_populates="abilities")
+    values: Mapped[list["AbilityValue"]] = relationship(
+        back_populates="ability", cascade="all, delete-orphan"
+    )
 
 
 class Story(Base):
@@ -184,7 +191,8 @@ class Story(Base):
         title: Story title.
         author: Story author, nullable.
         word_count: Word count of the story content.
-        section_count: Number of sections in the story.
+        subsection_count: Total number of content subsections across all story
+            sections.
         content: Full story text.
         content_text: Markup-stripped form of content, used for embedding.
         release_date: Story release date, nullable.
@@ -196,7 +204,7 @@ class Story(Base):
     title: Mapped[str] = mapped_column(String(256))
     author: Mapped[str | None] = mapped_column(String(128), nullable=True)
     word_count: Mapped[int] = mapped_column()
-    section_count: Mapped[int] = mapped_column()
+    subsection_count: Mapped[int] = mapped_column()
     content: Mapped[str] = mapped_column(Text)
     content_text: Mapped[str] = mapped_column(Text)
     release_date: Mapped[datetime | None] = mapped_column(nullable=True)
@@ -247,6 +255,99 @@ class Item(Base):
         secondaryjoin="Item.ddragon_id == item_components.c.item_id",
         back_populates="components",
     )
+    values: Mapped[list["ItemValue"]] = relationship(
+        back_populates="item", cascade="all, delete-orphan"
+    )
+
+
+class AbilityValue(Base):
+    """A named numeric value published by the source for one ability.
+
+    The kind field records the shape of the values array: 'per_rank' holds one
+    entry per learnable rank, 'by_level' holds exactly two entries that are the
+    level-1 and level-18 endpoints of a linear interpolation, 'scalar' holds a
+    single value, and 'ratio' holds a single scaling coefficient.
+
+    Args:
+        id: Surrogate primary key.
+        ability_id: Foreign key to the owning ability, cascades on delete.
+        name: Source value name, e.g. BaseDamage, ChampionHeal, Cooldown.
+        kind: Shape of the values array, one of per_rank, by_level, scalar,
+            ratio.
+        values: Numeric values in source order.
+        damage_type: Damage type this value applies to, one of magic, physical,
+            true; nullable when the source declares no damage type.
+        display_as_percent: Source hint that the value is displayed as a
+            percentage.
+        source: Origin API for this value, one of ddragon, cdragon.
+    """
+
+    __tablename__ = "ability_values"
+    __table_args__ = (
+        UniqueConstraint("ability_id", "name", name="uq_ability_values_ability_id_name"),
+        CheckConstraint(
+            "kind IN ('per_rank','by_level','scalar','ratio')", name="ck_ability_values_kind"
+        ),
+        CheckConstraint(
+            "damage_type IN ('magic','physical','true')", name="ck_ability_values_damage_type"
+        ),
+        CheckConstraint("source IN ('ddragon','cdragon')", name="ck_ability_values_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    ability_id: Mapped[int] = mapped_column(
+        ForeignKey("abilities.id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))
+    values: Mapped[list[float]] = mapped_column(ARRAY(Float))
+    damage_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    display_as_percent: Mapped[bool] = mapped_column(default=False)
+    source: Mapped[str] = mapped_column(String(16))
+
+    ability: Mapped["Ability"] = relationship(back_populates="values")
+
+
+class ItemValue(Base):
+    """A named numeric value published by the source for one item.
+
+    The kind field records the shape of the values array: 'per_rank' holds one
+    entry per learnable rank, 'by_level' holds exactly two entries that are the
+    level-1 and level-18 endpoints of a linear interpolation, 'scalar' holds a
+    single value, and 'ratio' holds a single scaling coefficient.
+
+    Args:
+        id: Surrogate primary key.
+        item_id: Foreign key to the owning item, cascades on delete.
+        name: Source value name, e.g. Armor, HealthRegen, Cooldown.
+        kind: Shape of the values array, one of per_rank, by_level, scalar,
+            ratio.
+        values: Numeric values in source order.
+        display_as_percent: Source hint that the value is displayed as a
+            percentage.
+        source: Origin API for this value, one of ddragon, cdragon.
+    """
+
+    __tablename__ = "item_values"
+    __table_args__ = (
+        UniqueConstraint("item_id", "name", name="uq_item_values_item_id_name"),
+        CheckConstraint(
+            "kind IN ('per_rank','by_level','scalar','ratio')", name="ck_item_values_kind"
+        ),
+        CheckConstraint("source IN ('ddragon','cdragon')", name="ck_item_values_source"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("items.ddragon_id", ondelete="CASCADE"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(16))
+    values: Mapped[list[float]] = mapped_column(ARRAY(Float))
+    display_as_percent: Mapped[bool] = mapped_column(default=False)
+    source: Mapped[str] = mapped_column(String(16))
+
+    item: Mapped["Item"] = relationship(back_populates="values")
 
 
 class RunePath(Base):

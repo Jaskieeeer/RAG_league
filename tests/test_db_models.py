@@ -2,12 +2,24 @@ from collections.abc import Iterator
 
 import pytest
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, UniqueConstraint, create_engine, inspect
+from sqlalchemy import CheckConstraint, UniqueConstraint, create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from lolrag.config import get_settings
-from lolrag.db.models import Base, Champion, Faction, Item, Rune, RunePath, champion_related
+from lolrag.db.models import (
+    Ability,
+    AbilityValue,
+    Base,
+    Champion,
+    Faction,
+    Item,
+    ItemValue,
+    Rune,
+    RunePath,
+    Story,
+    champion_related,
+)
 
 _EXPECTED_TABLES = {
     "factions",
@@ -26,6 +38,8 @@ _EXPECTED_TABLES = {
     "story_champion",
     "item_tag",
     "item_components",
+    "ability_values",
+    "item_values",
 }
 
 _DOCUMENT_ENTITY_FK_COLUMNS = (
@@ -260,3 +274,307 @@ def test_champion_playable_with_ddragon_key_persists(db_session: Session) -> Non
 
     assert champion.ddragon_key == "TestPlayableChampion"
     assert champion.playable is True
+
+
+def _make_ability(db_session: Session, slug: str, max_rank: int | None = 5) -> Ability:
+    """Persist a champion with one ability and return that ability.
+
+    Args:
+        db_session: Session the new rows are added to.
+        slug: Suffix making the faction, champion and ability rows unique.
+        max_rank: Value stored on the ability's max_rank column.
+
+    Returns:
+        The flushed Ability, with its owning champion and faction persisted.
+    """
+    faction = Faction(slug=f"test-faction-{slug}", name="Test Faction")
+    champion = Champion(
+        slug=f"test-champion-{slug}",
+        ddragon_key=f"TestChampion{slug}",
+        name="Test Champion",
+        title="Test Title",
+        faction=faction,
+        bio_full="Full bio",
+        bio_full_text="Full bio",
+        playable=True,
+    )
+    ability = Ability(
+        champion=champion,
+        slot="Q",
+        name="Test Ability",
+        description="Test description",
+        max_rank=max_rank,
+    )
+    db_session.add_all([faction, champion, ability])
+    db_session.flush()
+    return ability
+
+
+def _make_item(db_session: Session, ddragon_id: str) -> Item:
+    """Persist a single item and return it.
+
+    Args:
+        db_session: Session the new row is added to.
+        ddragon_id: Primary key for the new item.
+
+    Returns:
+        The flushed Item.
+    """
+    item = Item(
+        ddragon_id=ddragon_id,
+        name="Test Item",
+        description="Test description",
+        description_text="Test description",
+        gold_total=3000,
+        gold_base=1000,
+    )
+    db_session.add(item)
+    db_session.flush()
+    return item
+
+
+def test_ability_value_per_rank_round_trips(db_session: Session) -> None:
+    """A per_rank AbilityValue returns its five-element float array unchanged."""
+    ability = _make_ability(db_session, "per-rank")
+    value = AbilityValue(
+        ability=ability,
+        name="BaseDamage",
+        kind="per_rank",
+        values=[70.0, 105.0, 140.0, 175.0, 210.0],
+        source="cdragon",
+    )
+    db_session.add(value)
+    db_session.flush()
+    db_session.expire_all()
+
+    stored = db_session.execute(
+        select(AbilityValue).where(AbilityValue.ability_id == ability.id)
+    ).scalar_one()
+    assert stored.values == [70.0, 105.0, 140.0, 175.0, 210.0]
+    assert stored.kind == "per_rank"
+    assert stored.display_as_percent is False
+
+
+def test_ability_value_by_level_round_trips(db_session: Session) -> None:
+    """A by_level AbilityValue returns its two interpolation endpoints unchanged."""
+    ability = _make_ability(db_session, "by-level", max_rank=None)
+    value = AbilityValue(
+        ability=ability,
+        name="ChampionHeal",
+        kind="by_level",
+        values=[20.0, 240.0],
+        display_as_percent=True,
+        source="cdragon",
+    )
+    db_session.add(value)
+    db_session.flush()
+    db_session.expire_all()
+
+    stored = db_session.execute(
+        select(AbilityValue).where(AbilityValue.ability_id == ability.id)
+    ).scalar_one()
+    assert stored.values == [20.0, 240.0]
+    assert stored.display_as_percent is True
+
+
+def test_ability_value_accepts_null_and_valid_damage_type(db_session: Session) -> None:
+    """AbilityValue accepts both damage_type=None and damage_type='magic'."""
+    ability = _make_ability(db_session, "damage-type")
+    untyped = AbilityValue(
+        ability=ability,
+        name="Cooldown",
+        kind="per_rank",
+        values=[12.0, 11.0, 10.0, 9.0, 8.0],
+        damage_type=None,
+        source="ddragon",
+    )
+    typed = AbilityValue(
+        ability=ability,
+        name="BaseDamage",
+        kind="per_rank",
+        values=[70.0, 105.0, 140.0, 175.0, 210.0],
+        damage_type="magic",
+        source="cdragon",
+    )
+    db_session.add_all([untyped, typed])
+    db_session.flush()
+
+    assert untyped.damage_type is None
+    assert typed.damage_type == "magic"
+
+
+def test_ability_value_invalid_kind_violates_check_constraint(db_session: Session) -> None:
+    """An AbilityValue with an unknown kind raises IntegrityError."""
+    ability = _make_ability(db_session, "bad-kind")
+    db_session.add(
+        AbilityValue(
+            ability=ability,
+            name="BaseDamage",
+            kind="nonsense",
+            values=[10.0],
+            source="cdragon",
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_ability_value_invalid_damage_type_violates_check_constraint(db_session: Session) -> None:
+    """An AbilityValue with an unknown damage_type raises IntegrityError."""
+    ability = _make_ability(db_session, "bad-damage-type")
+    db_session.add(
+        AbilityValue(
+            ability=ability,
+            name="BaseDamage",
+            kind="per_rank",
+            values=[10.0],
+            damage_type="ice",
+            source="cdragon",
+        )
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_ability_value_duplicate_name_violates_unique_constraint(db_session: Session) -> None:
+    """Two AbilityValue rows sharing (ability_id, name) raise IntegrityError."""
+    ability = _make_ability(db_session, "duplicate-name")
+    db_session.add_all(
+        [
+            AbilityValue(
+                ability=ability,
+                name="BaseDamage",
+                kind="per_rank",
+                values=[10.0],
+                source="cdragon",
+            ),
+            AbilityValue(
+                ability=ability,
+                name="BaseDamage",
+                kind="scalar",
+                values=[20.0],
+                source="ddragon",
+            ),
+        ]
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_deleting_ability_cascades_to_ability_values(db_session: Session) -> None:
+    """Deleting an ability removes the ability_values rows that belong to it."""
+    ability = _make_ability(db_session, "cascade")
+    db_session.add(
+        AbilityValue(
+            ability=ability,
+            name="BaseDamage",
+            kind="per_rank",
+            values=[10.0, 20.0, 30.0, 40.0, 50.0],
+            source="cdragon",
+        )
+    )
+    db_session.flush()
+    ability_id = ability.id
+
+    db_session.delete(ability)
+    db_session.flush()
+
+    remaining = (
+        db_session.execute(select(AbilityValue).where(AbilityValue.ability_id == ability_id))
+        .scalars()
+        .all()
+    )
+    assert remaining == []
+
+
+def test_item_value_round_trips(db_session: Session) -> None:
+    """A scalar ItemValue returns its single-element float array unchanged."""
+    item = _make_item(db_session, "9101")
+    value = ItemValue(
+        item=item,
+        name="Armor",
+        kind="scalar",
+        values=[45.0],
+        source="ddragon",
+    )
+    db_session.add(value)
+    db_session.flush()
+    db_session.expire_all()
+
+    stored = db_session.execute(select(ItemValue).where(ItemValue.item_id == "9101")).scalar_one()
+    assert stored.values == [45.0]
+    assert stored.kind == "scalar"
+    assert stored.display_as_percent is False
+
+
+def test_item_value_duplicate_name_violates_unique_constraint(db_session: Session) -> None:
+    """Two ItemValue rows sharing (item_id, name) raise IntegrityError."""
+    item = _make_item(db_session, "9102")
+    db_session.add_all(
+        [
+            ItemValue(item=item, name="Armor", kind="scalar", values=[45.0], source="ddragon"),
+            ItemValue(item=item, name="Armor", kind="ratio", values=[0.35], source="cdragon"),
+        ]
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_item_value_invalid_kind_violates_check_constraint(db_session: Session) -> None:
+    """An ItemValue with an unknown kind raises IntegrityError."""
+    item = _make_item(db_session, "9103")
+    db_session.add(
+        ItemValue(item=item, name="Armor", kind="nonsense", values=[45.0], source="ddragon")
+    )
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_deleting_item_cascades_to_item_values(db_session: Session) -> None:
+    """Deleting an item removes the item_values rows that belong to it."""
+    item = _make_item(db_session, "9104")
+    db_session.add(
+        ItemValue(item=item, name="Armor", kind="scalar", values=[45.0], source="ddragon")
+    )
+    db_session.flush()
+
+    db_session.delete(item)
+    db_session.flush()
+
+    remaining = (
+        db_session.execute(select(ItemValue).where(ItemValue.item_id == "9104")).scalars().all()
+    )
+    assert remaining == []
+
+
+def test_ability_max_rank_accepts_null_and_integer(db_session: Session) -> None:
+    """Ability.max_rank stores NULL for a passive and an integer for a spell."""
+    passive = _make_ability(db_session, "passive", max_rank=None)
+    spell = _make_ability(db_session, "spell", max_rank=5)
+
+    assert passive.max_rank is None
+    assert spell.max_rank == 5
+
+
+def test_story_subsection_count_persists(db_session: Session) -> None:
+    """A story stores the total number of content subsections."""
+    story = Story(
+        slug="test-story-subsection-count",
+        title="Test Story",
+        word_count=1200,
+        subsection_count=7,
+        content="Story content",
+        content_text="Story content",
+    )
+    db_session.add(story)
+    db_session.flush()
+    db_session.expire_all()
+
+    stored = db_session.get(Story, "test-story-subsection-count")
+    assert stored is not None
+    assert stored.subsection_count == 7
