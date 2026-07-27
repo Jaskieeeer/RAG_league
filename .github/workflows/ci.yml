@@ -8,6 +8,26 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    env:
+      DDRAGON_VERSION: "16.14.1"
+      DATABASE_URL: postgresql+psycopg://lolrag:lolrag@localhost:5432/lolrag
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_USER: lolrag
+          POSTGRES_PASSWORD: lolrag
+          POSTGRES_DB: lolrag
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U lolrag"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -25,6 +45,9 @@ jobs:
 
       - name: Check formatting
         run: uv run ruff format --check .
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
 
       - name: Test
         run: uv run pytest
