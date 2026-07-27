@@ -1,7 +1,13 @@
-from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, UniqueConstraint, inspect
+from collections.abc import Iterator
 
-from lolrag.db.models import Base, Champion, champion_related
+import pytest
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import CheckConstraint, UniqueConstraint, create_engine, inspect
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
+from lolrag.config import get_settings
+from lolrag.db.models import Base, Champion, Faction, Item, Rune, RunePath, champion_related
 
 _EXPECTED_TABLES = {
     "factions",
@@ -19,6 +25,7 @@ _EXPECTED_TABLES = {
     "champion_related",
     "story_champion",
     "item_tag",
+    "item_components",
 }
 
 _DOCUMENT_ENTITY_FK_COLUMNS = (
@@ -102,3 +109,154 @@ def test_champion_related_self_referential_relationship_is_configured() -> None:
     relationship_property = mapper.relationships["related"]
     assert relationship_property.mapper.class_ is Champion
     assert relationship_property.secondary is champion_related
+
+
+@pytest.fixture
+def db_session() -> Iterator[Session]:
+    """Yield a Session bound to a transaction that is rolled back after the test.
+
+    Returns:
+        A Session against the configured database; every change made through
+        it is discarded when the test finishes, so the database stays empty.
+    """
+    engine = create_engine(get_settings().database_url)
+    connection = engine.connect()
+    transaction = connection.begin()
+    session = Session(bind=connection)
+    try:
+        yield session
+    finally:
+        session.close()
+        if transaction.is_active:
+            transaction.rollback()
+        connection.close()
+        engine.dispose()
+
+
+def test_item_components_and_builds_into_are_populated_in_both_directions(
+    db_session: Session,
+) -> None:
+    """Linking an item to its components populates builds_into on each component."""
+    parent = Item(
+        ddragon_id="9001",
+        name="Test Parent Item",
+        description="Parent description",
+        description_text="Parent description",
+        gold_total=3000,
+        gold_base=1000,
+    )
+    component_one = Item(
+        ddragon_id="9002",
+        name="Test Component One",
+        description="Component one description",
+        description_text="Component one description",
+        gold_total=1000,
+        gold_base=1000,
+    )
+    component_two = Item(
+        ddragon_id="9003",
+        name="Test Component Two",
+        description="Component two description",
+        description_text="Component two description",
+        gold_total=1000,
+        gold_base=1000,
+    )
+    parent.components = [component_one, component_two]
+    db_session.add_all([parent, component_one, component_two])
+    db_session.flush()
+
+    assert set(parent.components) == {component_one, component_two}
+    assert parent in component_one.builds_into
+    assert parent in component_two.builds_into
+
+
+def test_rune_row_index_and_position_index_persist(db_session: Session) -> None:
+    """A rune stores its row_index and position_index within the path."""
+    path = RunePath(key="Domination", name="Domination")
+    rune = Rune(
+        path=path,
+        key="Electrocute",
+        name="Electrocute",
+        short_desc="short",
+        short_desc_text="short",
+        long_desc="long",
+        long_desc_text="long",
+        row_index=0,
+        position_index=0,
+    )
+    db_session.add_all([path, rune])
+    db_session.flush()
+
+    assert rune.row_index == 0
+    assert rune.position_index == 0
+
+
+def test_rune_duplicate_path_row_position_violates_unique_constraint(db_session: Session) -> None:
+    """Two runes sharing (path_id, row_index, position_index) raise IntegrityError."""
+    path = RunePath(key="Domination", name="Domination")
+    first = Rune(
+        path=path,
+        key="Electrocute",
+        name="Electrocute",
+        short_desc="short",
+        short_desc_text="short",
+        long_desc="long",
+        long_desc_text="long",
+        row_index=0,
+        position_index=0,
+    )
+    second = Rune(
+        path=path,
+        key="DarkHarvest",
+        name="Dark Harvest",
+        short_desc="short",
+        short_desc_text="short",
+        long_desc="long",
+        long_desc_text="long",
+        row_index=0,
+        position_index=0,
+    )
+    db_session.add_all([path, first, second])
+
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+
+
+def test_champion_lore_only_persists_with_no_ddragon_key(db_session: Session) -> None:
+    """A non-playable champion with ddragon_key=None persists successfully."""
+    faction = Faction(slug="test-faction-lore-only", name="Test Faction")
+    champion = Champion(
+        slug="test-lore-only-champion",
+        ddragon_key=None,
+        name="Norra",
+        title="Test Title",
+        faction=faction,
+        bio_full="Full bio",
+        bio_full_text="Full bio",
+        playable=False,
+    )
+    db_session.add_all([faction, champion])
+    db_session.flush()
+
+    assert champion.ddragon_key is None
+    assert champion.playable is False
+
+
+def test_champion_playable_with_ddragon_key_persists(db_session: Session) -> None:
+    """A playable champion with a ddragon_key still persists successfully."""
+    faction = Faction(slug="test-faction-playable", name="Test Faction")
+    champion = Champion(
+        slug="test-playable-champion",
+        ddragon_key="TestPlayableChampion",
+        name="Test Champion",
+        title="Test Title",
+        faction=faction,
+        bio_full="Full bio",
+        bio_full_text="Full bio",
+        playable=True,
+    )
+    db_session.add_all([faction, champion])
+    db_session.flush()
+
+    assert champion.ddragon_key == "TestPlayableChampion"
+    assert champion.playable is True

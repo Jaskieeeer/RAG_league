@@ -49,6 +49,13 @@ item_tag = Table(
     Column("tag", String(64), primary_key=True),
 )
 
+item_components = Table(
+    "item_components",
+    Base.metadata,
+    Column("item_id", ForeignKey("items.ddragon_id", ondelete="CASCADE"), primary_key=True),
+    Column("component_id", ForeignKey("items.ddragon_id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 # ---------- entities ----------
 
@@ -60,6 +67,8 @@ class Faction(Base):
         slug: Unique faction identifier, primary key.
         name: Human-readable faction name.
         overview: Long-form faction description, nullable.
+        overview_text: Markup-stripped form of overview, used for embedding,
+            nullable.
     """
 
     __tablename__ = "factions"
@@ -67,6 +76,7 @@ class Faction(Base):
     slug: Mapped[str] = mapped_column(String(64), primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
     overview: Mapped[str | None] = mapped_column(Text, nullable=True)
+    overview_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     champions: Mapped[list["Champion"]] = relationship(back_populates="faction")
 
@@ -90,24 +100,33 @@ class Champion(Base):
 
     Args:
         slug: Unique champion identifier, primary key.
-        ddragon_key: Data Dragon key for this champion, unique.
+        ddragon_key: Data Dragon key for this champion, unique, nullable for
+            lore-only characters with no Data Dragon entry.
         name: Champion display name.
         title: Champion title, e.g. "the Darkin Blade".
         faction_slug: Foreign key to the champion's lore faction, not null.
         bio_full: Full champion biography text.
+        bio_full_text: Markup-stripped form of bio_full, used for embedding.
         bio_short: Short champion biography text, nullable.
+        bio_short_text: Markup-stripped form of bio_short, used for
+            embedding, nullable.
+        playable: Whether the character is a playable champion; False for
+            lore-only characters.
         release_date: Champion release date, nullable.
     """
 
     __tablename__ = "champions"
 
     slug: Mapped[str] = mapped_column(String(64), primary_key=True)
-    ddragon_key: Mapped[str] = mapped_column(String(64), unique=True)
+    ddragon_key: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)
     name: Mapped[str] = mapped_column(String(128))
     title: Mapped[str] = mapped_column(String(256))
     faction_slug: Mapped[str] = mapped_column(ForeignKey("factions.slug"), nullable=False)
     bio_full: Mapped[str] = mapped_column(Text)
+    bio_full_text: Mapped[str] = mapped_column(Text)
     bio_short: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bio_short_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    playable: Mapped[bool] = mapped_column()
     release_date: Mapped[datetime | None] = mapped_column(nullable=True)
 
     faction: Mapped["Faction"] = relationship(back_populates="champions")
@@ -136,6 +155,8 @@ class Ability(Base):
         name: Ability name.
         description: Ability description text.
         tooltip: Ability tooltip text, nullable.
+        tooltip_text: Markup-stripped form of tooltip, used for embedding,
+            nullable.
     """
 
     __tablename__ = "abilities"
@@ -150,6 +171,7 @@ class Ability(Base):
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[str] = mapped_column(Text)
     tooltip: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tooltip_text: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     champion: Mapped["Champion"] = relationship(back_populates="abilities")
 
@@ -164,6 +186,7 @@ class Story(Base):
         word_count: Word count of the story content.
         section_count: Number of sections in the story.
         content: Full story text.
+        content_text: Markup-stripped form of content, used for embedding.
         release_date: Story release date, nullable.
     """
 
@@ -175,6 +198,7 @@ class Story(Base):
     word_count: Mapped[int] = mapped_column()
     section_count: Mapped[int] = mapped_column()
     content: Mapped[str] = mapped_column(Text)
+    content_text: Mapped[str] = mapped_column(Text)
     release_date: Mapped[datetime | None] = mapped_column(nullable=True)
 
     champions: Mapped[list["Champion"]] = relationship(
@@ -189,9 +213,13 @@ class Item(Base):
         ddragon_id: Data Dragon item id, primary key.
         name: Item name.
         description: Full item description text.
+        description_text: Markup-stripped form of description, used for
+            embedding.
         plaintext: Short plaintext item description, nullable.
         gold_total: Total purchase gold cost.
         gold_base: Base gold cost, excluding component value.
+        depth: Number of build steps from base items, nullable; only a
+            subset of items carry this in the source.
     """
 
     __tablename__ = "items"
@@ -199,9 +227,26 @@ class Item(Base):
     ddragon_id: Mapped[str] = mapped_column(String(16), primary_key=True)
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[str] = mapped_column(Text)
+    description_text: Mapped[str] = mapped_column(Text)
     plaintext: Mapped[str | None] = mapped_column(Text, nullable=True)
     gold_total: Mapped[int] = mapped_column()
     gold_base: Mapped[int] = mapped_column()
+    depth: Mapped[int | None] = mapped_column(nullable=True)
+
+    components: Mapped[list["Item"]] = relationship(
+        "Item",
+        secondary=item_components,
+        primaryjoin="Item.ddragon_id == item_components.c.item_id",
+        secondaryjoin="Item.ddragon_id == item_components.c.component_id",
+        back_populates="builds_into",
+    )
+    builds_into: Mapped[list["Item"]] = relationship(
+        "Item",
+        secondary=item_components,
+        primaryjoin="Item.ddragon_id == item_components.c.component_id",
+        secondaryjoin="Item.ddragon_id == item_components.c.item_id",
+        back_populates="components",
+    )
 
 
 class RunePath(Base):
@@ -231,19 +276,28 @@ class Rune(Base):
         key: Rune key from Data Dragon.
         name: Rune display name.
         short_desc: Short rune description.
+        short_desc_text: Markup-stripped form of short_desc, used for
+            embedding.
         long_desc: Long rune description.
-        slot_index: Position of the rune within its slot/row.
+        long_desc_text: Markup-stripped form of long_desc, used for
+            embedding.
+        row_index: Row within the path, 0-3; row 0 holds the keystones.
+        position_index: Order of the rune within its row.
     """
 
     __tablename__ = "runes"
+    __table_args__ = (UniqueConstraint("path_id", "row_index", "position_index"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
     path_id: Mapped[int] = mapped_column(ForeignKey("rune_paths.id", ondelete="CASCADE"))
     key: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(128))
     short_desc: Mapped[str] = mapped_column(Text)
+    short_desc_text: Mapped[str] = mapped_column(Text)
     long_desc: Mapped[str] = mapped_column(Text)
-    slot_index: Mapped[int] = mapped_column()
+    long_desc_text: Mapped[str] = mapped_column(Text)
+    row_index: Mapped[int] = mapped_column()
+    position_index: Mapped[int] = mapped_column()
 
     path: Mapped["RunePath"] = relationship(back_populates="runes")
 
@@ -256,6 +310,8 @@ class SummonerSpell(Base):
         key: Summoner spell key from Data Dragon.
         name: Summoner spell display name.
         description: Summoner spell description.
+        description_text: Markup-stripped form of description, used for
+            embedding.
         cooldown: Cooldown in seconds, nullable.
         summoner_level: Minimum summoner level required, nullable.
     """
@@ -266,6 +322,7 @@ class SummonerSpell(Base):
     key: Mapped[str] = mapped_column(String(64))
     name: Mapped[str] = mapped_column(String(128))
     description: Mapped[str] = mapped_column(Text)
+    description_text: Mapped[str] = mapped_column(Text)
     cooldown: Mapped[int | None] = mapped_column(nullable=True)
     summoner_level: Mapped[int | None] = mapped_column(nullable=True)
 
@@ -397,7 +454,15 @@ class Chunk(Base):
     """
 
     __tablename__ = "chunks"
-    __table_args__ = (UniqueConstraint("document_id", "chunk_index"),)
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index"),
+        Index(
+            "ix_chunks_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     document_id: Mapped[int] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
