@@ -25,9 +25,18 @@ class FetchClient:
             http_max_retries.
         refresh: If True, ignore existing cache entries and refetch every URL,
             overwriting the cache. Cache entries are otherwise never stale.
+        transport: Transport the underlying httpx.AsyncClient sends through,
+            letting tests supply an in-memory transport so they never reach the
+            network. None is httpx's own default, meaning the real network.
     """
 
-    def __init__(self, settings: Settings, *, refresh: bool = False) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        *,
+        refresh: bool = False,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         self._settings = settings
         self._refresh = refresh
         self._cache_dir = Path(settings.cache_dir)
@@ -35,6 +44,7 @@ class FetchClient:
         self._client = httpx.AsyncClient(
             headers={"User-Agent": settings.http_user_agent},
             timeout=settings.http_timeout_seconds,
+            transport=transport,
         )
         self.hits = 0
         self.misses = 0

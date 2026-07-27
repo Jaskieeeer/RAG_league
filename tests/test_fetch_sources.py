@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from lolrag.config import get_settings
-from lolrag.fetch import cdragon, ddragon, universe
+from lolrag.fetch import cdragon, cdragon_bin, ddragon, universe
 from lolrag.fetch.cache import cache_path
 from lolrag.fetch.client import FetchClient
 from tests.test_fetch_client import build_client, build_settings
@@ -136,6 +136,61 @@ async def test_cdragon_fetch_all_champions_keys_by_numeric_key(tmp_path: Path) -
 
     assert set(champions) == {266, 103}
     assert len(calls) == 2
+
+
+# ---------- cdragon bin ----------
+
+
+async def test_cdragon_champion_bin_lowercases_the_slug_in_both_path_positions(
+    tmp_path: Path,
+) -> None:
+    """The bin fetcher addresses a champion by its lowercase slug, used twice in the path."""
+    settings = build_settings(tmp_path)
+    calls: list[httpx.Request] = []
+
+    async with build_client(settings, ok_handler(calls)) as client:
+        await cdragon_bin.fetch_champion_bin(client, settings, "MonkeyKing")
+
+    assert str(calls[0].url) == (
+        "https://cdragon.test/latest/game/data/characters/monkeyking/monkeyking.bin.json"
+    )
+
+
+async def test_cdragon_champion_bin_caches_and_serves_the_second_call(tmp_path: Path) -> None:
+    """The bin payload lands at its cache path and a repeat call issues no second request."""
+    settings = build_settings(tmp_path)
+    calls: list[httpx.Request] = []
+
+    async with build_client(settings, ok_handler(calls)) as client:
+        await cdragon_bin.fetch_champion_bin(client, settings, "MonkeyKing")
+        await cdragon_bin.fetch_champion_bin(client, settings, "MonkeyKing")
+
+    assert cache_path(tmp_path, "cdragon", "latest", "characters", "monkeyking.bin.json").exists()
+    assert len(calls) == 1
+
+
+async def test_cdragon_fetch_all_champion_bins_keys_by_original_id(tmp_path: Path) -> None:
+    """Gathered bin payloads come back keyed by the requested ids, not by their slugs."""
+    settings = build_settings(tmp_path)
+    calls: list[httpx.Request] = []
+
+    async with build_client(settings, ok_handler(calls)) as client:
+        bins = await cdragon_bin.fetch_all_champion_bins(client, settings, ["MonkeyKing", "KaiSa"])
+
+    assert set(bins) == {"MonkeyKing", "KaiSa"}
+    assert len(calls) == 2
+
+
+async def test_cdragon_item_bin_uses_expected_url_and_cache_path(tmp_path: Path) -> None:
+    """The item bin is a single file fetched without a champion segment."""
+    settings = build_settings(tmp_path)
+    calls: list[httpx.Request] = []
+
+    async with build_client(settings, ok_handler(calls)) as client:
+        await cdragon_bin.fetch_item_bin(client, settings)
+
+    assert str(calls[0].url) == "https://cdragon.test/latest/game/items.cdtb.bin.json"
+    assert cache_path(tmp_path, "cdragon", "latest", "items.cdtb.bin.json").exists()
 
 
 # ---------- universe ----------

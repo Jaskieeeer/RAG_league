@@ -53,16 +53,10 @@ def build_client(
         refresh: Whether the client ignores existing cache entries.
 
     Returns:
-        FetchClient with its httpx.AsyncClient replaced by one backed by
-        httpx.MockTransport, so no test ever reaches the network.
+        FetchClient constructed with an httpx.MockTransport, so no test ever
+        reaches the network.
     """
-    client = FetchClient(settings, refresh=refresh)
-    client._client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handler),
-        headers={"User-Agent": settings.http_user_agent},
-        timeout=settings.http_timeout_seconds,
-    )
-    return client
+    return FetchClient(settings, refresh=refresh, transport=httpx.MockTransport(handler))
 
 
 def json_handler(

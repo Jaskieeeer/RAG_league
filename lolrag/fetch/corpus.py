@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 
 from lolrag.config import Settings
-from lolrag.fetch import cdragon, ddragon, universe
+from lolrag.fetch import cdragon, cdragon_bin, ddragon, universe
 from lolrag.fetch.client import FetchClient
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,10 @@ class CorpusCacheStats:
     Args:
         ddragon_champions: Number of Data Dragon champion detail files fetched.
         cdragon_champions: Number of Community Dragon champion records fetched.
+        cdragon_champion_bins: Number of Community Dragon raw champion bin
+            files fetched.
+        cdragon_item_bin: Number of Community Dragon raw item bin files
+            fetched, 1 once the single file is present.
         universe_champions: Number of Universe champion payloads fetched.
         universe_factions: Number of Universe faction payloads fetched.
         universe_stories: Number of distinct Universe stories fetched.
@@ -25,6 +29,8 @@ class CorpusCacheStats:
 
     ddragon_champions: int
     cdragon_champions: int
+    cdragon_champion_bins: int
+    cdragon_item_bin: int
     universe_champions: int
     universe_factions: int
     universe_stories: int
@@ -65,6 +71,10 @@ async def warm_cache(settings: Settings, *, refresh: bool = False) -> CorpusCach
         await cdragon.fetch_all_champions(client, settings, champion_keys)
         logger.info("fetched %d Community Dragon champions", len(champion_keys))
 
+        await cdragon_bin.fetch_all_champion_bins(client, settings, champion_ids)
+        await cdragon_bin.fetch_item_bin(client, settings)
+        logger.info("fetched %d Community Dragon champion bins and the item bin", len(champion_ids))
+
         search_index = await universe.fetch_search_index(client, settings)
         champion_slugs = [entry["slug"] for entry in search_index["champions"]]
         faction_slugs = [entry["slug"] for entry in search_index["factions"]]
@@ -92,6 +102,8 @@ async def warm_cache(settings: Settings, *, refresh: bool = False) -> CorpusCach
         return CorpusCacheStats(
             ddragon_champions=len(champion_ids),
             cdragon_champions=len(champion_keys),
+            cdragon_champion_bins=len(champion_ids),
+            cdragon_item_bin=1,
             universe_champions=len(champion_slugs),
             universe_factions=len(faction_slugs),
             universe_stories=len(story_slugs),
