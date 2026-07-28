@@ -273,10 +273,16 @@ class AbilityValue(Base):
     Args:
         id: Surrogate primary key.
         ability_id: Foreign key to the owning ability, cascades on delete.
-        name: Source value name, e.g. BaseDamage, ChampionHeal, Cooldown.
+        spell_key: Short source name of the spell that publishes the value, e.g.
+            AatroxQ or AurelionSolR2. One ability spans a root spell and its
+            child spells, which publish values of the same name independently.
+        name: Source value name, e.g. BaseDamage, ChampionHeal, CooldownTime.
         kind: Shape of the values array, one of per_rank, by_level, scalar,
             ratio.
         values: Numeric values in source order.
+        scaling_stat: Champion stat this value scales with, one of ap, ad,
+            armor, magic_resist, attack_speed, crit, health; nullable when the
+            value does not scale or the source enum is undecoded.
         damage_type: Damage type this value applies to, one of magic, physical,
             true; nullable when the source declares no damage type.
         display_as_percent: Source hint that the value is displayed as a
@@ -286,9 +292,18 @@ class AbilityValue(Base):
 
     __tablename__ = "ability_values"
     __table_args__ = (
-        UniqueConstraint("ability_id", "name", name="uq_ability_values_ability_id_name"),
+        UniqueConstraint(
+            "ability_id",
+            "spell_key",
+            "name",
+            name="uq_ability_values_ability_id_spell_key_name",
+        ),
         CheckConstraint(
             "kind IN ('per_rank','by_level','scalar','ratio')", name="ck_ability_values_kind"
+        ),
+        CheckConstraint(
+            "scaling_stat IN ('ap','ad','armor','magic_resist','attack_speed','crit','health')",
+            name="ck_ability_values_scaling_stat",
         ),
         CheckConstraint(
             "damage_type IN ('magic','physical','true')", name="ck_ability_values_damage_type"
@@ -300,9 +315,11 @@ class AbilityValue(Base):
     ability_id: Mapped[int] = mapped_column(
         ForeignKey("abilities.id", ondelete="CASCADE"), nullable=False
     )
-    name: Mapped[str] = mapped_column(String(64))
+    spell_key: Mapped[str] = mapped_column(String(64))
+    name: Mapped[str] = mapped_column(String(128))
     kind: Mapped[str] = mapped_column(String(16))
     values: Mapped[list[float]] = mapped_column(ARRAY(Float))
+    scaling_stat: Mapped[str | None] = mapped_column(String(16), nullable=True)
     damage_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     display_as_percent: Mapped[bool] = mapped_column(default=False)
     source: Mapped[str] = mapped_column(String(16))

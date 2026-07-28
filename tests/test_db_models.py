@@ -372,6 +372,7 @@ def test_ability_value_per_rank_round_trips(db_session: Session) -> None:
     ability = _make_ability(db_session, "per-rank")
     value = AbilityValue(
         ability=ability,
+        spell_key="TestQ",
         name="BaseDamage",
         kind="per_rank",
         values=[70.0, 105.0, 140.0, 175.0, 210.0],
@@ -394,6 +395,7 @@ def test_ability_value_by_level_round_trips(db_session: Session) -> None:
     ability = _make_ability(db_session, "by-level", max_rank=None)
     value = AbilityValue(
         ability=ability,
+        spell_key="TestPassive",
         name="ChampionHeal",
         kind="by_level",
         values=[20.0, 240.0],
@@ -416,6 +418,7 @@ def test_ability_value_accepts_null_and_valid_damage_type(db_session: Session) -
     ability = _make_ability(db_session, "damage-type")
     untyped = AbilityValue(
         ability=ability,
+        spell_key="TestQ",
         name="Cooldown",
         kind="per_rank",
         values=[12.0, 11.0, 10.0, 9.0, 8.0],
@@ -424,6 +427,7 @@ def test_ability_value_accepts_null_and_valid_damage_type(db_session: Session) -
     )
     typed = AbilityValue(
         ability=ability,
+        spell_key="TestQ",
         name="BaseDamage",
         kind="per_rank",
         values=[70.0, 105.0, 140.0, 175.0, 210.0],
@@ -443,6 +447,7 @@ def test_ability_value_invalid_kind_violates_check_constraint(db_session: Sessio
     db_session.add(
         AbilityValue(
             ability=ability,
+            spell_key="TestQ",
             name="BaseDamage",
             kind="nonsense",
             values=[10.0],
@@ -460,6 +465,7 @@ def test_ability_value_invalid_damage_type_violates_check_constraint(db_session:
     db_session.add(
         AbilityValue(
             ability=ability,
+            spell_key="TestQ",
             name="BaseDamage",
             kind="per_rank",
             values=[10.0],
@@ -473,12 +479,13 @@ def test_ability_value_invalid_damage_type_violates_check_constraint(db_session:
 
 
 def test_ability_value_duplicate_name_violates_unique_constraint(db_session: Session) -> None:
-    """Two AbilityValue rows sharing (ability_id, name) raise IntegrityError."""
+    """Two AbilityValue rows sharing (ability_id, spell_key, name) raise IntegrityError."""
     ability = _make_ability(db_session, "duplicate-name")
     db_session.add_all(
         [
             AbilityValue(
                 ability=ability,
+                spell_key="TestQ",
                 name="BaseDamage",
                 kind="per_rank",
                 values=[10.0],
@@ -486,6 +493,7 @@ def test_ability_value_duplicate_name_violates_unique_constraint(db_session: Ses
             ),
             AbilityValue(
                 ability=ability,
+                spell_key="TestQ",
                 name="BaseDamage",
                 kind="scalar",
                 values=[20.0],
@@ -504,6 +512,7 @@ def test_deleting_ability_cascades_to_ability_values(db_session: Session) -> Non
     db_session.add(
         AbilityValue(
             ability=ability,
+            spell_key="TestQ",
             name="BaseDamage",
             kind="per_rank",
             values=[10.0, 20.0, 30.0, 40.0, 50.0],
