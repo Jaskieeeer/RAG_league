@@ -152,7 +152,7 @@ def db_session() -> Iterator[Session]:
 def test_item_components_and_builds_into_are_populated_in_both_directions(
     db_session: Session,
 ) -> None:
-    """Linking an item to its components populates builds_into on each component."""
+    """Component rows inserted through Core are visible from both ends of the relationship."""
     parent = Item(
         ddragon_id="9001",
         name="Test Parent Item",
@@ -177,20 +177,34 @@ def test_item_components_and_builds_into_are_populated_in_both_directions(
         gold_total=1000,
         gold_base=1000,
     )
-    parent.components = [component_one, component_two]
     db_session.add_all([parent, component_one, component_two])
     db_session.flush()
+    db_session.execute(
+        item_components.insert(),
+        [
+            {"item_id": "9001", "component_id": "9002"},
+            {"item_id": "9001", "component_id": "9003"},
+        ],
+    )
+    db_session.flush()
+    db_session.expire_all()
 
+    parent = db_session.get(Item, "9001")
+    component_one = db_session.get(Item, "9002")
+    component_two = db_session.get(Item, "9003")
+    assert parent is not None
+    assert component_one is not None
+    assert component_two is not None
     assert set(parent.components) == {component_one, component_two}
     assert parent in component_one.builds_into
     assert parent in component_two.builds_into
 
 
 def test_item_component_quantity_defaults_to_one(db_session: Session) -> None:
-    """A link written through the relationship gets quantity 1 from the server default."""
-    parent = _make_item(db_session, "9201")
-    component = _make_item(db_session, "9202")
-    parent.components = [component]
+    """A link inserted without naming quantity gets 1 from the server default."""
+    _make_item(db_session, "9201")
+    _make_item(db_session, "9202")
+    db_session.execute(item_components.insert().values(item_id="9201", component_id="9202"))
     db_session.flush()
 
     quantity = db_session.execute(

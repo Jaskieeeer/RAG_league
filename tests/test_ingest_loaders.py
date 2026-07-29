@@ -19,7 +19,11 @@ from lolrag.db.models import (
     RunePath,
     Story,
     SummonerSpell,
+    champion_related,
+    champion_role,
     item_components,
+    item_tag,
+    story_champion,
 )
 from lolrag.ingest.loaders import (
     UNAFFILIATED_SLUG,
@@ -27,7 +31,6 @@ from lolrag.ingest.loaders import (
     build_abilities,
     build_champions,
     build_factions,
-    build_item_components,
     build_items,
     build_roles,
     build_rune_paths,
@@ -127,13 +130,16 @@ def ddragon_champion_detail(champion_id: str) -> dict[str, Any]:
     }
 
 
-def universe_champion(slug: str, *, faction_slug: str) -> dict[str, Any]:
+def universe_champion(
+    slug: str, *, faction_slug: str, related: tuple[str, ...] = ()
+) -> dict[str, Any]:
     """Build a Universe champion payload with a biography and one story module.
 
     Args:
         slug: Universe champion slug the payload describes.
         faction_slug: Value stored under "associated-faction-slug"; an empty
             string reproduces a champion with no published faction.
+        related: Slugs published under the top-level "related-champions" array.
 
     Returns:
         Payload shaped like a real Universe champion response, whose modules
@@ -148,6 +154,7 @@ def universe_champion(slug: str, *, faction_slug: str) -> dict[str, Any]:
             "release-date": "2013-06-13T19:43:26.000Z",
             "biography": {"full": AATROX_BIO_FULL, "short": AATROX_BIO_SHORT},
         },
+        "related-champions": [{"slug": entry} for entry in related],
         "modules": [{"type": "story-preview", "story-slug": f"{slug}-story"}],
     }
 
@@ -424,26 +431,6 @@ def test_build_champions_marks_a_lore_only_character_unplayable() -> None:
     assert champions[0].ddragon_key is None
 
 
-def test_build_champions_attaches_the_data_dragon_tags_as_roles() -> None:
-    """Champion roles are built from the Data Dragon tags of the matching id."""
-    champions = build_champions(
-        ddragon_champion_list(),
-        {"renataglasc": universe_champion("renataglasc", faction_slug="zaun")},
-    )
-
-    assert [role.slug for role in champions[0].roles] == ["support", "mage"]
-
-
-def test_build_champions_leaves_a_lore_only_character_without_roles() -> None:
-    """A character with no Data Dragon entry has no tags to become roles."""
-    champions = build_champions(
-        ddragon_champion_list(),
-        {"norra": universe_champion("norra", faction_slug="bandle-city")},
-    )
-
-    assert champions[0].roles == []
-
-
 def test_build_champions_stores_raw_bio_verbatim_and_cleans_only_the_text_columns() -> None:
     """bio_full stays byte-identical while bio_full_text is its cleaned form."""
     champions = build_champions(
@@ -540,21 +527,6 @@ def test_build_items_stores_raw_description_verbatim_and_cleans_description_text
     assert items["3035"].description == raw
     assert items["3035"].description_text == clean_markup(raw)
     assert items["3035"].description_text == "Armor Penetration & more"
-
-
-def test_build_item_components_counts_a_repeated_component() -> None:
-    """A recipe listing the same component twice yields one row with quantity two."""
-    rows = build_item_components(ddragon_items())
-
-    assert rows == [{"item_id": "3035", "component_id": "1036", "quantity": 2}]
-
-
-def test_build_item_components_skips_items_without_a_recipe() -> None:
-    """An item with no "from" list contributes no association row."""
-    payload = ddragon_items()
-    del payload["data"]["3035"]["from"]
-
-    assert build_item_components(payload) == []
 
 
 def test_build_rune_paths_keeps_data_dragon_ids_and_positions() -> None:
@@ -691,9 +663,10 @@ def build_routes() -> dict[str, Any]:
             champion_id
         )
     factions = {"aatrox": "noxus", "renataglasc": "noxus", "norra": ""}
+    related = {"aatrox": ("renataglasc",), "renataglasc": (), "norra": ("aatrox",)}
     for slug, faction_slug in factions.items():
         routes[f"{UNIVERSE_PATH}/champions/{slug}/index.json"] = universe_champion(
-            slug, faction_slug=faction_slug
+            slug, faction_slug=faction_slug, related=related[slug]
         )
         routes[f"{UNIVERSE_PATH}/story/{slug}-story/index.json"] = universe_story(f"{slug}-story")
     for slug in FACTION_SLUGS:
@@ -751,7 +724,7 @@ def row_counts(session: Session) -> dict[str, int]:
 
     Returns:
         Mapping of table label to row count, covering the entity tables and
-        the two association tables the loaders populate.
+        every association table the run rewrites.
     """
     entities = {
         "factions": Faction,
@@ -764,13 +737,23 @@ def row_counts(session: Session) -> dict[str, int]:
         "runes": Rune,
         "summoner_spells": SummonerSpell,
     }
+    associations = {
+        "champion_role": champion_role,
+        "champion_related": champion_related,
+        "story_champion": story_champion,
+        "item_tag": item_tag,
+        "item_components": item_components,
+    }
     counts = {
         label: session.execute(select(func.count()).select_from(model)).scalar_one()
         for label, model in entities.items()
     }
-    counts["item_components"] = session.execute(
-        select(func.count()).select_from(item_components)
-    ).scalar_one()
+    counts.update(
+        {
+            label: session.execute(select(func.count()).select_from(table)).scalar_one()
+            for label, table in associations.items()
+        }
+    )
     return counts
 
 
@@ -784,6 +767,10 @@ EXPECTED_COUNTS = {
     "rune_paths": 1,
     "runes": 3,
     "summoner_spells": 2,
+    "champion_role": 3,
+    "champion_related": 2,
+    "story_champion": 3,
+    "item_tag": 3,
     "item_components": 1,
 }
 

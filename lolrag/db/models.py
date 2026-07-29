@@ -134,18 +134,19 @@ class Champion(Base):
     release_date: Mapped[datetime | None] = mapped_column(nullable=True)
 
     faction: Mapped["Faction"] = relationship(back_populates="champions")
-    roles: Mapped[list["Role"]] = relationship(secondary=champion_role)
+    roles: Mapped[list["Role"]] = relationship(secondary=champion_role, viewonly=True)
     abilities: Mapped[list["Ability"]] = relationship(
         back_populates="champion", cascade="all, delete-orphan"
     )
     stories: Mapped[list["Story"]] = relationship(
-        secondary=story_champion, back_populates="champions"
+        secondary=story_champion, back_populates="champions", viewonly=True
     )
     related: Mapped[list["Champion"]] = relationship(
         "Champion",
         secondary=champion_related,
         primaryjoin="Champion.slug == champion_related.c.champion_slug",
         secondaryjoin="Champion.slug == champion_related.c.related_slug",
+        viewonly=True,
     )
 
 
@@ -212,7 +213,7 @@ class Story(Base):
     release_date: Mapped[datetime | None] = mapped_column(nullable=True)
 
     champions: Mapped[list["Champion"]] = relationship(
-        secondary=story_champion, back_populates="stories"
+        secondary=story_champion, back_populates="stories", viewonly=True
     )
 
 
@@ -249,6 +250,7 @@ class Item(Base):
         primaryjoin="Item.ddragon_id == item_components.c.item_id",
         secondaryjoin="Item.ddragon_id == item_components.c.component_id",
         back_populates="builds_into",
+        viewonly=True,
     )
     builds_into: Mapped[list["Item"]] = relationship(
         "Item",
@@ -256,6 +258,7 @@ class Item(Base):
         primaryjoin="Item.ddragon_id == item_components.c.component_id",
         secondaryjoin="Item.ddragon_id == item_components.c.item_id",
         back_populates="components",
+        viewonly=True,
     )
     values: Mapped[list["ItemValue"]] = relationship(
         back_populates="item", cascade="all, delete-orphan"

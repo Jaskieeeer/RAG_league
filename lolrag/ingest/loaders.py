@@ -1,13 +1,10 @@
 import asyncio
 import logging
-from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
 
 from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from lolrag.config import Settings
@@ -22,7 +19,6 @@ from lolrag.db.models import (
     RunePath,
     Story,
     SummonerSpell,
-    item_components,
 )
 from lolrag.fetch import ddragon, universe
 from lolrag.fetch.client import FetchClient
@@ -136,7 +132,7 @@ def build_champions(champion_list: dict, universe_payloads: dict[str, dict]) -> 
 
     Args:
         champion_list: Parsed Data Dragon champion.json body, supplying the
-            Data Dragon id string and the role tags for playable champions.
+            Data Dragon id string for playable champions.
         universe_payloads: Mapping of Universe champion slug to that
             champion's parsed Universe payload. This is the authoritative
             roster: characters present here but absent from champion_list are
@@ -146,13 +142,11 @@ def build_champions(champion_list: dict, universe_payloads: dict[str, dict]) -> 
         One Champion per Universe payload, with ddragon_key set to the Data
         Dragon id string and playable False for lore-only characters. The
         faction falls back to the synthetic "unaffiliated" slug whenever the
-        payload publishes no faction.
+        payload publishes no faction. Roles are not attached here: champion_role
+        is written by the association loader, which owns it outright.
     """
     data = champion_list["data"]
     ddragon_id_by_slug = {universe_slug(ddragon_id): ddragon_id for ddragon_id in data}
-    tags_by_slug = {
-        universe_slug(ddragon_id): entry.get("tags", []) for ddragon_id, entry in data.items()
-    }
 
     champions: list[Champion] = []
     for slug, payload in universe_payloads.items():
@@ -174,7 +168,6 @@ def build_champions(champion_list: dict, universe_payloads: dict[str, dict]) -> 
                 bio_short_text=clean_optional_markup(bio_short),
                 playable=ddragon_key is not None,
                 release_date=parse_release_date(record.get("release-date")),
-                roles=[Role(slug=tag.lower(), name=tag) for tag in tags_by_slug.get(slug, [])],
             )
         )
     return champions
@@ -238,7 +231,7 @@ def build_items(payload: dict) -> list[Item]:
     Returns:
         One Item per record. Recipes are not attached here because a component
         link carries a quantity, which the plain many-to-many relationship
-        cannot express; build_item_components produces those rows instead.
+        cannot express; the association loader writes those rows instead.
     """
     return [
         Item(
@@ -253,28 +246,6 @@ def build_items(payload: dict) -> list[Item]:
         )
         for item_id, record in payload["data"].items()
     ]
-
-
-def build_item_components(payload: dict) -> list[dict[str, Any]]:
-    """Build the item_components association rows, counting repeated components.
-
-    Args:
-        payload: Parsed Data Dragon item.json body, whose "data" key maps item
-            id to a record carrying an optional "from" list of component ids.
-
-    Returns:
-        One mapping per distinct (item_id, component_id) pair, with quantity
-        counting how many times the recipe lists that component, so a recipe
-        consuming two copies of one component is not flattened to one.
-    """
-    rows: list[dict[str, Any]] = []
-    for item_id, record in payload["data"].items():
-        counts = Counter(record.get("from") or [])
-        rows.extend(
-            {"item_id": item_id, "component_id": component_id, "quantity": quantity}
-            for component_id, quantity in counts.items()
-        )
-    return rows
 
 
 def build_rune_paths(payload: list[dict]) -> list[RunePath]:
@@ -436,30 +407,6 @@ def _merge_all(session: Session, rows: Iterable[Base]) -> None:
         session.merge(row)
 
 
-def _upsert_item_components(session: Session, rows: Sequence[dict[str, Any]]) -> None:
-    """Upsert the item build recipe rows, quantity included.
-
-    Args:
-        session: Open Session the statement is executed on.
-        rows: Mappings carrying item_id, component_id and quantity, as built by
-            build_item_components.
-
-    Returns:
-        None. The write goes through Core rather than the Item.components
-        relationship because a secondary relationship cannot set the quantity
-        column; a repeated load updates the quantity in place.
-    """
-    if not rows:
-        return
-    statement = pg_insert(item_components).values(list(rows))
-    session.execute(
-        statement.on_conflict_do_update(
-            index_elements=["item_id", "component_id"],
-            set_={"quantity": statement.excluded.quantity},
-        )
-    )
-
-
 def _assign_existing_ability_ids(session: Session, abilities: Sequence[Ability]) -> None:
     """Give each built ability the surrogate id its natural key already holds.
 
@@ -497,13 +444,17 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
             universe_* value plus cache_dir.
 
     Returns:
-        LoadStats with one count per table plus the number of champions that
-        fell back to the synthetic "unaffiliated" faction.
+        LoadStats with one count per entity table plus the number of champions
+        that fell back to the synthetic "unaffiliated" faction. The association
+        tables are rewritten too, once every entity they reference exists, and
+        their own counts are logged rather than returned.
 
     Raises:
         httpx.HTTPStatusError: If any request fails after its retries.
         sqlalchemy.exc.SQLAlchemyError: If any row violates the schema.
     """
+    from lolrag.ingest.associations import load_associations
+
     champion_list, item_payload, rune_payload, spell_payload = await asyncio.gather(
         ddragon.fetch_champion_list(client, settings),
         ddragon.fetch_items(client, settings),
@@ -560,9 +511,6 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
     _merge_all(session, items)
     session.flush()
 
-    _upsert_item_components(session, build_item_components(item_payload))
-    session.flush()
-
     rune_paths = build_rune_paths(rune_payload)
     _merge_all(session, rune_paths)
     session.flush()
@@ -570,6 +518,8 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
     summoner_spells = build_summoner_spells(spell_payload)
     _merge_all(session, summoner_spells)
     session.flush()
+
+    load_associations(session, champion_list, item_payload, universe_champions)
 
     stats = LoadStats(
         factions=len(factions),
