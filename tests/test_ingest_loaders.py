@@ -54,9 +54,13 @@ AATROX_BIO_SHORT = "<p>Once honored defenders of Shurima.</p>"
 AATROX_Q_TOOLTIP = (
     "Aatrox slams his greatsword, dealing <physicalDamage>{{ qdamage }}</physicalDamage>."
 )
-STORY_BLOCK_ONE = "<p>The blade was quiet.</p>"
+STORY_BLOCK_ONE = "<p>The blade was quiet.</p><p>Nobody spoke.</p>"
 STORY_BLOCK_TWO = "<p>Then it sang &amp; screamed.</p>"
 STORY_BLOCK_THREE = "<p>Nothing answered.</p>"
+
+Q_DYNAMIC_DESCRIPTION = "Deals <physicalDamage>@QDamage@ physical damage</physicalDamage>."
+W_DYNAMIC_DESCRIPTION = "Slows by @spell.AatroxQ:SlowAmount@."
+R_DYNAMIC_DESCRIPTION = "Aatrox grows in size and revives once."
 
 
 # ---------- payload fixtures ----------
@@ -90,7 +94,8 @@ def ddragon_champion_detail(champion_id: str) -> dict[str, Any]:
 
     Returns:
         Payload whose "data" key maps champion_id to a record with "passive"
-        and a four-entry "spells" list carrying distinct maxrank values.
+        and a four-entry "spells" list carrying distinct maxrank values and the
+        spell ids the Community Dragon bin is joined on.
     """
     return {
         "data": {
@@ -102,24 +107,28 @@ def ddragon_champion_detail(champion_id: str) -> dict[str, Any]:
                 },
                 "spells": [
                     {
+                        "id": f"{champion_id}Q",
                         "name": f"{champion_id} Q",
                         "description": "Q description.",
                         "tooltip": AATROX_Q_TOOLTIP,
                         "maxrank": 5,
                     },
                     {
+                        "id": f"{champion_id}W",
                         "name": f"{champion_id} W",
                         "description": "W description.",
                         "tooltip": "W tooltip.",
                         "maxrank": 5,
                     },
                     {
+                        "id": f"{champion_id}E",
                         "name": f"{champion_id} E",
                         "description": "E description.",
                         "tooltip": "E tooltip.",
                         "maxrank": 6,
                     },
                     {
+                        "id": f"{champion_id}R",
                         "name": f"{champion_id} R",
                         "description": "R description.",
                         "tooltip": "R tooltip.",
@@ -129,6 +138,58 @@ def ddragon_champion_detail(champion_id: str) -> dict[str, Any]:
             }
         }
     }
+
+
+def cdragon_champion_record(champion_id: str) -> dict[str, Any]:
+    """Build a Community Dragon champion record covering all four tooltip outcomes.
+
+    Args:
+        champion_id: Data Dragon champion id the record belongs to.
+
+    Returns:
+        Payload whose "spells" list holds, in Q/W/E/R order, a tooltip that
+        resolves from a data value, one blocked by a cross-spell token, one that
+        publishes no dynamicDescription at all, and one that carries no token.
+    """
+    return {
+        "id": champion_id,
+        "spells": [
+            {"spellKey": "q", "dynamicDescription": Q_DYNAMIC_DESCRIPTION},
+            {"spellKey": "w", "dynamicDescription": W_DYNAMIC_DESCRIPTION},
+            {"spellKey": "e"},
+            {"spellKey": "r", "dynamicDescription": R_DYNAMIC_DESCRIPTION},
+        ],
+    }
+
+
+def cdragon_champion_bin(champion_id: str) -> dict[str, Any]:
+    """Build a Community Dragon champion bin holding one champion's spell objects.
+
+    Args:
+        champion_id: Data Dragon champion id the bin belongs to.
+
+    Returns:
+        Payload with the root CharacterRecord naming the passive spell, an
+        AbilityObject per slot and a SpellObject under each, the Q spell
+        publishing the seven-wide one-indexed QDamage array its tooltip names.
+    """
+    spells = f"Characters/{champion_id}/Spells"
+    passive_key = f"{spells}/{champion_id}PAbility/{champion_id}P"
+    payload: dict[str, Any] = {
+        f"Characters/{champion_id}/CharacterRecords/Root": {
+            "__type": "CharacterRecord",
+            "mCharacterPassiveSpell": passive_key,
+        },
+        f"{spells}/{champion_id}PAbility": {"__type": "AbilityObject"},
+        passive_key: {"__type": "SpellObject", "mSpell": {}},
+    }
+    for slot in ("Q", "W", "E", "R"):
+        payload[f"{spells}/{champion_id}{slot}Ability"] = {"__type": "AbilityObject"}
+        payload[f"{spells}/{champion_id}{slot}Ability/{champion_id}{slot}"] = {
+            "__type": "SpellObject",
+            "mSpell": {"DataValues": [{"name": "QDamage", "values": [0, 10, 25, 40, 55, 70, 70]}]},
+        }
+    return payload
 
 
 def universe_champion(
@@ -457,21 +518,37 @@ def test_build_champions_parses_the_release_date() -> None:
     assert champions[0].release_date == datetime(2013, 6, 13, 19, 43, 26)
 
 
+def build_one_champions_abilities(champion_id: str) -> list[Ability]:
+    """Build one champion's ability rows from the three fixture payloads.
+
+    Args:
+        champion_id: Data Dragon champion id every payload is built for.
+
+    Returns:
+        The five Ability rows build_abilities produces for that champion.
+    """
+    return build_abilities(
+        {champion_id: ddragon_champion_detail(champion_id)},
+        {champion_id: cdragon_champion_bin(champion_id)},
+        {champion_id: cdragon_champion_record(champion_id)},
+    )
+
+
 def test_build_abilities_gives_the_passive_slot_p_and_no_rank() -> None:
-    """The passive lands in slot P with max_rank and both tooltip columns None."""
-    abilities = build_abilities({"Aatrox": ddragon_champion_detail("Aatrox")})
-    passive = abilities[0]
+    """The passive lands in slot P with max_rank and every tooltip column None."""
+    passive = build_one_champions_abilities("Aatrox")[0]
 
     assert passive.slot == "P"
     assert passive.max_rank is None
     assert passive.tooltip is None
     assert passive.tooltip_text is None
+    assert passive.tooltip_resolved is None
     assert passive.description == "A passive that never ranks up."
 
 
 def test_build_abilities_orders_spells_into_q_w_e_r_with_their_maxrank() -> None:
     """Spells take slots Q, W, E and R in source order, each keeping its maxrank."""
-    abilities = build_abilities({"Aatrox": ddragon_champion_detail("Aatrox")})
+    abilities = build_one_champions_abilities("Aatrox")
 
     assert [(ability.slot, ability.max_rank) for ability in abilities] == [
         ("P", None),
@@ -484,17 +561,47 @@ def test_build_abilities_orders_spells_into_q_w_e_r_with_their_maxrank() -> None
 
 def test_build_abilities_stores_raw_tooltip_verbatim_and_cleans_tooltip_text() -> None:
     """tooltip keeps the source markup while tooltip_text is its cleaned form."""
-    abilities = build_abilities({"Aatrox": ddragon_champion_detail("Aatrox")})
-    spell = abilities[1]
+    spell = build_one_champions_abilities("Aatrox")[1]
 
     assert spell.tooltip == AATROX_Q_TOOLTIP
     assert spell.tooltip_text == clean_markup(AATROX_Q_TOOLTIP)
     assert spell.tooltip_text == "Aatrox slams his greatsword, dealing {{ qdamage }}."
 
 
+def test_build_abilities_substitutes_the_community_dragon_tooltip() -> None:
+    """A resolvable tooltip stores the substituted, markup-stripped text."""
+    spell = build_one_champions_abilities("Aatrox")[1]
+
+    assert spell.tooltip_resolved == "Deals 10/25/40/55/70 physical damage."
+
+
+def test_build_abilities_stores_null_for_a_blocked_tooltip() -> None:
+    """A tooltip naming another spell's value is dropped whole, never half filled."""
+    spell = build_one_champions_abilities("Aatrox")[2]
+
+    assert spell.slot == "W"
+    assert spell.tooltip_resolved is None
+
+
+def test_build_abilities_stores_null_when_no_dynamic_description_is_published() -> None:
+    """A spell the source publishes no dynamicDescription for resolves to nothing."""
+    spell = build_one_champions_abilities("Aatrox")[3]
+
+    assert spell.slot == "E"
+    assert spell.tooltip_resolved is None
+
+
+def test_build_abilities_resolves_a_tooltip_that_carries_no_token() -> None:
+    """A tooltip with nothing to substitute is still stored, cleaned."""
+    spell = build_one_champions_abilities("Aatrox")[4]
+
+    assert spell.slot == "R"
+    assert spell.tooltip_resolved == R_DYNAMIC_DESCRIPTION
+
+
 def test_build_abilities_uses_the_universe_slug_for_the_champion_key() -> None:
     """Abilities are keyed on the Universe slug, so the Renata override applies."""
-    abilities = build_abilities({"Renata": ddragon_champion_detail("Renata")})
+    abilities = build_one_champions_abilities("Renata")
 
     assert {ability.champion_slug for ability in abilities} == {"renataglasc"}
 
@@ -505,7 +612,11 @@ def test_build_abilities_rejects_a_champion_without_exactly_four_spells() -> Non
     detail["data"]["Aatrox"]["spells"] = detail["data"]["Aatrox"]["spells"][:3]
 
     with pytest.raises(ValueError):
-        build_abilities({"Aatrox": detail})
+        build_abilities(
+            {"Aatrox": detail},
+            {"Aatrox": cdragon_champion_bin("Aatrox")},
+            {"Aatrox": cdragon_champion_record("Aatrox")},
+        )
 
 
 def test_build_items_maps_gold_plaintext_and_depth() -> None:
@@ -592,22 +703,21 @@ def test_build_stories_walks_sections_then_subsections() -> None:
     assert story.content == "\n\n".join([STORY_BLOCK_ONE, STORY_BLOCK_TWO, STORY_BLOCK_THREE])
 
 
-def test_build_stories_stores_raw_content_verbatim_and_cleans_content_text() -> None:
-    """content keeps every source block verbatim while content_text is cleaned once."""
+def test_build_stories_separates_subsections_from_paragraphs_in_content_text() -> None:
+    """Cleaned blocks join on three newlines while a paragraph break inside one stays two."""
     story = build_stories({"aatrox-story": universe_story("aatrox-story")})[0]
 
-    assert STORY_BLOCK_TWO in story.content
-    assert story.content_text == clean_markup(story.content)
     assert story.content_text == (
-        "The blade was quiet.\n\nThen it sang & screamed.\n\nNothing answered."
+        "The blade was quiet.\n\nNobody spoke.\n\n\nThen it sang & screamed.\n\n\nNothing answered."
     )
+    assert story.content_text.count("\n\n\n") == 2
 
 
 def test_build_stories_counts_words_of_the_cleaned_content() -> None:
     """word_count counts whitespace-separated words of the cleaned text."""
     story = build_stories({"aatrox-story": universe_story("aatrox-story")})[0]
 
-    assert story.word_count == 11
+    assert story.word_count == 13
 
 
 def test_build_stories_leaves_author_null() -> None:
@@ -623,9 +733,13 @@ def test_build_stories_leaves_author_null() -> None:
 
 DDRAGON_DATA_PATH = "/cdn/16.14.1/data/en_US"
 UNIVERSE_PATH = "/v1/en_us"
+CDRAGON_BIN_PATH = "/latest/game/data/characters"
+CDRAGON_CHAMPION_PATH = "/latest/plugins/rcp-be-lol-game-data/global/default/v1/champions"
 
 CHAMPION_SLUGS = ("aatrox", "renataglasc", "norra")
 FACTION_SLUGS = ("noxus",)
+
+PLAYABLE_CHAMPION_KEYS = {"Aatrox": 266, "Renata": 888}
 
 EXPECTED_STATS = LoadStats(
     factions=2,
@@ -638,6 +752,8 @@ EXPECTED_STATS = LoadStats(
     runes=3,
     summoner_spells=2,
     unaffiliated_champions=1,
+    tooltips_resolved=4,
+    tooltips_unresolved=4,
     associations=AssociationStats(
         champion_roles=3,
         champion_related=2,
@@ -667,8 +783,13 @@ def build_routes() -> dict[str, Any]:
             "factions": [{"slug": slug} for slug in FACTION_SLUGS],
         },
     }
-    for champion_id in ("Aatrox", "Renata"):
+    for champion_id, champion_key in PLAYABLE_CHAMPION_KEYS.items():
         routes[f"{DDRAGON_DATA_PATH}/champion/{champion_id}.json"] = ddragon_champion_detail(
+            champion_id
+        )
+        slug = champion_id.lower()
+        routes[f"{CDRAGON_BIN_PATH}/{slug}/{slug}.bin.json"] = cdragon_champion_bin(champion_id)
+        routes[f"{CDRAGON_CHAMPION_PATH}/{champion_key}.json"] = cdragon_champion_record(
             champion_id
         )
     factions = {"aatrox": "noxus", "renataglasc": "noxus", "norra": ""}
@@ -795,6 +916,28 @@ async def test_load_all_persists_every_entity_table(db_session: Session, tmp_pat
 
     assert stats == EXPECTED_STATS
     assert row_counts(db_session) == EXPECTED_COUNTS
+
+
+async def test_load_all_persists_the_resolved_tooltip(db_session: Session, tmp_path: Path) -> None:
+    """The substituted Community Dragon tooltip reaches the stored ability row."""
+    settings = build_settings(tmp_path)
+    async with build_client(settings, corpus_handler()) as client:
+        await load_all(db_session, client, settings)
+    db_session.expire_all()
+
+    stored = {
+        slot: resolved
+        for slot, resolved in db_session.execute(
+            select(Ability.slot, Ability.tooltip_resolved).where(Ability.champion_slug == "aatrox")
+        )
+    }
+    assert stored == {
+        "P": None,
+        "Q": "Deals 10/25/40/55/70 physical damage.",
+        "W": None,
+        "E": None,
+        "R": R_DYNAMIC_DESCRIPTION,
+    }
 
 
 async def test_load_all_persists_the_component_quantity_and_keeps_traversal(

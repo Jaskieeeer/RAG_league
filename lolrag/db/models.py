@@ -162,6 +162,11 @@ class Ability(Base):
         tooltip: Ability tooltip text, nullable.
         tooltip_text: Markup-stripped form of tooltip, used for embedding,
             nullable.
+        tooltip_resolved: Community Dragon tooltip with every "@token@"
+            substituted for the number it names, markup-stripped; NULL when the
+            substitution was blocked by a token that cannot be answered from the
+            spell in hand, or when the ability publishes no dynamic description
+            at all, as every passive does.
         max_rank: Number of rank-up levels for this ability; NULL for passives.
     """
 
@@ -178,6 +183,7 @@ class Ability(Base):
     description: Mapped[str] = mapped_column(Text)
     tooltip: Mapped[str | None] = mapped_column(Text, nullable=True)
     tooltip_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tooltip_resolved: Mapped[str | None] = mapped_column(Text, nullable=True)
     max_rank: Mapped[int | None] = mapped_column(nullable=True)
 
     champion: Mapped["Champion"] = relationship(back_populates="abilities")

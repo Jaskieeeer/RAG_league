@@ -1,6 +1,7 @@
 import hashlib
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 from sqlalchemy import create_engine, func, select
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 from lolrag.config import get_settings
 from lolrag.db.models import Ability, AbilityValue, Base, story_champion
 from lolrag.fetch.client import FetchClient
+from lolrag.ingest.identifiers import PASSIVE_SLOT
 from lolrag.ingest.run import run_ingest
 
 CACHE_DIR = Path(get_settings().cache_dir)
@@ -40,6 +42,10 @@ EXPECTED_COUNTS = {
 }
 
 AATROX_Q_SPELL_KEY = "AatroxQ"
+
+EXPECTED_SPELLS_RESOLVED = 560
+EXPECTED_SPELLS_UNRESOLVED = 132
+EXPECTED_PASSIVES = 173
 
 
 @pytest.fixture
@@ -125,6 +131,51 @@ def ability_values_by_name(
         )
     ).scalars()
     return {row.name: row for row in rows}
+
+
+def tooltip_counts(session: Session) -> dict[str, int]:
+    """Count the stored abilities by slot kind and tooltip resolution.
+
+    Args:
+        session: Session the counts are read through.
+
+    Returns:
+        Mapping with the number of spell rows carrying a resolved tooltip, the
+        number of spell rows whose tooltip is NULL, the number of passive rows
+        and the number of passive rows carrying a resolved tooltip.
+    """
+
+    def count(*conditions: Any) -> int:
+        return session.execute(
+            select(func.count()).select_from(Ability).where(*conditions)
+        ).scalar_one()
+
+    return {
+        "spells_resolved": count(
+            Ability.slot != PASSIVE_SLOT, Ability.tooltip_resolved.is_not(None)
+        ),
+        "spells_unresolved": count(
+            Ability.slot != PASSIVE_SLOT, Ability.tooltip_resolved.is_(None)
+        ),
+        "passives": count(Ability.slot == PASSIVE_SLOT),
+        "passives_resolved": count(
+            Ability.slot == PASSIVE_SLOT, Ability.tooltip_resolved.is_not(None)
+        ),
+    }
+
+
+async def test_run_ingest_resolves_the_measured_share_of_tooltips(db_session: Session) -> None:
+    """The corpus splits into resolved spells, blocked spells and passives that publish none."""
+    settings = get_settings()
+    async with FetchClient(settings) as client:
+        await run_ingest(db_session, client, settings)
+
+    assert tooltip_counts(db_session) == {
+        "spells_resolved": EXPECTED_SPELLS_RESOLVED,
+        "spells_unresolved": EXPECTED_SPELLS_UNRESOLVED,
+        "passives": EXPECTED_PASSIVES,
+        "passives_resolved": 0,
+    }
 
 
 async def test_run_ingest_loads_the_full_corpus_and_repeats_it_identically(

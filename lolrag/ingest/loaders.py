@@ -1,8 +1,9 @@
 import asyncio
 import logging
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,11 +21,13 @@ from lolrag.db.models import (
     Story,
     SummonerSpell,
 )
-from lolrag.fetch import ddragon, universe
+from lolrag.fetch import cdragon, cdragon_bin, ddragon, universe
 from lolrag.fetch.client import FetchClient
 from lolrag.ingest.associations import AssociationStats, load_associations
 from lolrag.ingest.identifiers import PASSIVE_SLOT, SPELL_SLOTS, universe_slug
 from lolrag.ingest.markup import clean_markup, clean_optional_markup
+from lolrag.ingest.tooltips import TokenBlocked, spell_context, substitute_tooltip
+from lolrag.ingest.values import group_spells
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +36,10 @@ UNAFFILIATED_NAME = "Unaffiliated"
 
 PLACEHOLDER_SPELL_SUFFIX = "Placeholder"
 
+DYNAMIC_DESCRIPTION_KEY = "dynamicDescription"
+
 STORY_BLOCK_SEPARATOR = "\n\n"
+STORY_SCENE_SEPARATOR = "\n\n\n"
 
 
 # ---------- helpers ----------
@@ -156,34 +162,106 @@ def build_champions(champion_list: dict, universe_payloads: dict[str, dict]) -> 
     return champions
 
 
-def build_abilities(details: dict[str, dict]) -> list[Ability]:
+def resolve_tooltips(
+    ddragon_id: str,
+    detail: Mapping[str, Any],
+    bin_payload: Mapping[str, Any],
+    cdragon_champion: Mapping[str, Any],
+) -> dict[str, str | None]:
+    """Fill in one champion's Community Dragon tooltips with the numbers they name.
+
+    Args:
+        ddragon_id: Data Dragon champion id the detail body is keyed on.
+        detail: Parsed Data Dragon champion detail body, supplying slot order
+            and each spell's maxrank.
+        bin_payload: Parsed Community Dragon champion bin file, supplying the
+            data values and formulas the tokens resolve against.
+        cdragon_champion: Parsed Community Dragon champion record, whose
+            "spells" list publishes the dynamicDescription templates in Q, W, E
+            and R order.
+
+    Returns:
+        Mapping of ability slot to the cleaned tooltip, or to None when the
+        source publishes no dynamic description or a token could not be answered
+        from the spell in hand. The whole tooltip falls back on one blocked
+        token, so a partly substituted string never reaches the corpus. The
+        passive is always None: no champion publishes a dynamic description for
+        it.
+
+    Raises:
+        ValueError: If the Data Dragon spells cannot be joined to the bin.
+    """
+    groups = {group.slot: group for group in group_spells(ddragon_id, detail, bin_payload)}
+    resolved: dict[str, str | None] = {PASSIVE_SLOT: None}
+    for slot, spell in zip(SPELL_SLOTS, cdragon_champion["spells"], strict=True):
+        template = spell.get(DYNAMIC_DESCRIPTION_KEY)
+        if not template:
+            logger.debug("%s %s publishes no dynamic description", ddragon_id, slot)
+            resolved[slot] = None
+            continue
+        group = groups[slot]
+        substituted = substitute_tooltip(
+            template, spell_context(bin_payload[group.root_key], group.max_rank)
+        )
+        if isinstance(substituted, TokenBlocked):
+            logger.debug(
+                "%s %s tooltip blocked on @%s@: %s",
+                ddragon_id,
+                slot,
+                substituted.token,
+                substituted.reason,
+            )
+            resolved[slot] = None
+            continue
+        resolved[slot] = clean_markup(substituted)
+    return resolved
+
+
+def build_abilities(
+    details: dict[str, dict],
+    bins: dict[str, dict],
+    cdragon_champions: dict[str, dict],
+) -> list[Ability]:
     """Build the passive and Q/W/E/R ability rows for every champion detail.
 
     Args:
         details: Mapping of Data Dragon champion id to that champion's parsed
             detail body, whose "data" key holds the record with "passive" and
             "spells".
+        bins: Mapping of Data Dragon champion id to that champion's parsed
+            Community Dragon bin file.
+        cdragon_champions: Mapping of Data Dragon champion id to that champion's
+            parsed Community Dragon record, rekeyed off the numeric champion key
+            the endpoint is addressed by.
 
     Returns:
         Five Ability rows per champion: the passive in slot P with max_rank
         None, then the four spells in "spells" order as slots Q, W, E and R
-        carrying their own maxrank.
+        carrying their own maxrank. Each spell carries the resolved Community
+        Dragon tooltip, or NULL where it could not be resolved. The Data Dragon
+        tooltip columns are kept beside it unchanged even though this corpus
+        ships them with unresolved placeholders, because they are what the
+        first-party API publishes.
 
     Raises:
         ValueError: If a champion publishes a number of spells other than the
-            four Q/W/E/R slots.
+            four Q/W/E/R slots, or if its spells cannot be joined to the bin.
     """
     abilities: list[Ability] = []
     for ddragon_id, payload in details.items():
         slug = universe_slug(ddragon_id)
         record = payload["data"][ddragon_id]
         passive = record["passive"]
+        resolved = resolve_tooltips(
+            ddragon_id, payload, bins[ddragon_id], cdragon_champions[ddragon_id]
+        )
         abilities.append(
             Ability(
                 champion_slug=slug,
                 slot=PASSIVE_SLOT,
                 name=passive["name"],
                 description=passive["description"],
+                tooltip_resolved=resolved[PASSIVE_SLOT],
                 max_rank=None,
             )
         )
@@ -197,6 +275,7 @@ def build_abilities(details: dict[str, dict]) -> list[Ability]:
                     description=spell["description"],
                     tooltip=tooltip,
                     tooltip_text=clean_optional_markup(tooltip),
+                    tooltip_resolved=resolved[slot],
                     max_rank=spell["maxrank"],
                 )
             )
@@ -313,7 +392,13 @@ def build_stories(payloads: dict[str, dict]) -> list[Story]:
         One Story per payload; content joins every non-empty subsection block
         in source order, subsection_count counts those blocks and word_count is
         the whitespace-separated word count of the cleaned content. author is
-        always None because no permitted source publishes it.
+        always None because no permitted source publishes it. content_text
+        cleans each block on its own and joins the results with a triple
+        newline, so a subsection boundary stays distinguishable from a paragraph
+        break: cleaning the joined string instead would turn both into the same
+        two newlines, and the cleaner collapses any run of three or more
+        newlines within a block down to two, so a triple newline in the result
+        can only be a boundary.
     """
     stories: list[Story] = []
     for slug, payload in payloads.items():
@@ -325,7 +410,7 @@ def build_stories(payloads: dict[str, dict]) -> list[Story]:
             if subsection.get("content")
         ]
         content = STORY_BLOCK_SEPARATOR.join(blocks)
-        content_text = clean_markup(content)
+        content_text = STORY_SCENE_SEPARATOR.join(clean_markup(block) for block in blocks)
         stories.append(
             Story(
                 slug=slug,
@@ -361,6 +446,12 @@ class LoadStats:
         summoner_spells: Number of summoner spell rows persisted.
         unaffiliated_champions: Champions whose faction fell back to the
             synthetic "unaffiliated" faction.
+        tooltips_resolved: Ability rows carrying a fully substituted Community
+            Dragon tooltip.
+        tooltips_unresolved: Spell rows whose tooltip is NULL, whether because a
+            token blocked the substitution or because the source publishes no
+            dynamic description. Passives are excluded: none of them publishes
+            one, so counting them would report a data gap as a failure.
         associations: Counts reported by the association loader the run drives,
             which owns its own stats object rather than folding its five counts
             into this one.
@@ -376,6 +467,8 @@ class LoadStats:
     runes: int
     summoner_spells: int
     unaffiliated_champions: int
+    tooltips_resolved: int
+    tooltips_unresolved: int
     associations: AssociationStats
 
 
@@ -427,18 +520,22 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
             so the caller decides whether the run is kept.
         client: Open FetchClient serving the corpus, from the on-disk cache
             when it is warm.
-        settings: Application settings providing every ddragon_* and
+        settings: Application settings providing every ddragon_*, cdragon_* and
             universe_* value plus cache_dir.
 
     Returns:
         LoadStats with one count per entity table, the number of champions that
-        fell back to the synthetic "unaffiliated" faction, and the nested
-        AssociationStats. The association tables are rewritten too, once every
-        entity they reference exists.
+        fell back to the synthetic "unaffiliated" faction, the tooltip
+        resolution split, and the nested AssociationStats. The association
+        tables are rewritten too, once every entity they reference exists. The
+        Community Dragon bins and records are fetched here rather than shared
+        with the value loader, which fetches them again: both stages read them
+        from the on-disk cache, so the second read costs no request.
 
     Raises:
         httpx.HTTPStatusError: If any request fails after its retries.
         sqlalchemy.exc.SQLAlchemyError: If any row violates the schema.
+        ValueError: If a Data Dragon spell cannot be joined to the bin.
     """
     champion_list, item_payload, rune_payload, spell_payload = await asyncio.gather(
         ddragon.fetch_champion_list(client, settings),
@@ -447,8 +544,21 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
         ddragon.fetch_summoner_spells(client, settings),
     )
     champion_ids = list(champion_list["data"])
-    details = await ddragon.fetch_all_champion_details(client, settings, champion_ids)
-    logger.info("loaded %d Data Dragon champion details", len(details))
+    champion_keys = [int(entry["key"]) for entry in champion_list["data"].values()]
+    details, bins, records = await asyncio.gather(
+        ddragon.fetch_all_champion_details(client, settings, champion_ids),
+        cdragon_bin.fetch_all_champion_bins(client, settings, champion_ids),
+        cdragon.fetch_all_champions(client, settings, champion_keys),
+    )
+    cdragon_champions = {
+        ddragon_id: records[champion_key]
+        for ddragon_id, champion_key in zip(champion_ids, champion_keys, strict=True)
+    }
+    logger.info(
+        "loaded %d Data Dragon champion details and %d Community Dragon bins",
+        len(details),
+        len(bins),
+    )
 
     search_index = await universe.fetch_search_index(client, settings)
     champion_slugs = [entry["slug"] for entry in search_index["champions"]]
@@ -483,7 +593,7 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
     _merge_all(session, champions)
     session.flush()
 
-    abilities = build_abilities(details)
+    abilities = build_abilities(details, bins, cdragon_champions)
     _assign_existing_ability_ids(session, abilities)
     _merge_all(session, abilities)
     session.flush()
@@ -518,6 +628,12 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
         summoner_spells=len(summoner_spells),
         unaffiliated_champions=sum(
             1 for champion in champions if champion.faction_slug == UNAFFILIATED_SLUG
+        ),
+        tooltips_resolved=sum(1 for ability in abilities if ability.tooltip_resolved is not None),
+        tooltips_unresolved=sum(
+            1
+            for ability in abilities
+            if ability.slot != PASSIVE_SLOT and ability.tooltip_resolved is None
         ),
         associations=associations,
     )
