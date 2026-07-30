@@ -35,8 +35,9 @@ select = ["E", "F", "I", "UP"]
 markers = [
     "integration: requires network and API keys",
     "eval: runs the evaluation harness against the real corpus and LLM (needs GOOGLE_API_KEY and a built index)",
+    "corpus: loads the full corpus from the warm cache into Postgres (slow, needs data/cache)",
 ]
-addopts = "-m 'not integration and not eval'"
+addopts = "-m 'not integration and not eval and not corpus'"
 asyncio_mode = "auto"
 
 [build-system]

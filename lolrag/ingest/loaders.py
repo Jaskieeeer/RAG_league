@@ -22,6 +22,8 @@ from lolrag.db.models import (
 )
 from lolrag.fetch import ddragon, universe
 from lolrag.fetch.client import FetchClient
+from lolrag.ingest.associations import AssociationStats, load_associations
+from lolrag.ingest.identifiers import PASSIVE_SLOT, SPELL_SLOTS, universe_slug
 from lolrag.ingest.markup import clean_markup, clean_optional_markup
 
 logger = logging.getLogger(__name__)
@@ -29,31 +31,12 @@ logger = logging.getLogger(__name__)
 UNAFFILIATED_SLUG = "unaffiliated"
 UNAFFILIATED_NAME = "Unaffiliated"
 
-SPELL_SLOTS = ("Q", "W", "E", "R")
-PASSIVE_SLOT = "P"
-
-UNIVERSE_SLUG_OVERRIDES = {"Renata": "renataglasc"}
-
 PLACEHOLDER_SPELL_SUFFIX = "Placeholder"
 
 STORY_BLOCK_SEPARATOR = "\n\n"
 
 
 # ---------- helpers ----------
-
-
-def universe_slug(ddragon_id: str) -> str:
-    """Return the Riot Universe slug for a Data Dragon champion id.
-
-    Args:
-        ddragon_id: Data Dragon champion id string, e.g. "Aatrox" or
-            "MonkeyKing".
-
-    Returns:
-        The Universe slug, which is the lowercased id for every champion
-        except the ones listed in UNIVERSE_SLUG_OVERRIDES.
-    """
-    return UNIVERSE_SLUG_OVERRIDES.get(ddragon_id, ddragon_id.lower())
 
 
 def parse_release_date(value: str | None) -> datetime | None:
@@ -378,6 +361,9 @@ class LoadStats:
         summoner_spells: Number of summoner spell rows persisted.
         unaffiliated_champions: Champions whose faction fell back to the
             synthetic "unaffiliated" faction.
+        associations: Counts reported by the association loader the run drives,
+            which owns its own stats object rather than folding its five counts
+            into this one.
     """
 
     factions: int
@@ -390,6 +376,7 @@ class LoadStats:
     runes: int
     summoner_spells: int
     unaffiliated_champions: int
+    associations: AssociationStats
 
 
 def _merge_all(session: Session, rows: Iterable[Base]) -> None:
@@ -444,17 +431,15 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
             universe_* value plus cache_dir.
 
     Returns:
-        LoadStats with one count per entity table plus the number of champions
-        that fell back to the synthetic "unaffiliated" faction. The association
-        tables are rewritten too, once every entity they reference exists, and
-        their own counts are logged rather than returned.
+        LoadStats with one count per entity table, the number of champions that
+        fell back to the synthetic "unaffiliated" faction, and the nested
+        AssociationStats. The association tables are rewritten too, once every
+        entity they reference exists.
 
     Raises:
         httpx.HTTPStatusError: If any request fails after its retries.
         sqlalchemy.exc.SQLAlchemyError: If any row violates the schema.
     """
-    from lolrag.ingest.associations import load_associations
-
     champion_list, item_payload, rune_payload, spell_payload = await asyncio.gather(
         ddragon.fetch_champion_list(client, settings),
         ddragon.fetch_items(client, settings),
@@ -519,7 +504,7 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
     _merge_all(session, summoner_spells)
     session.flush()
 
-    load_associations(session, champion_list, item_payload, universe_champions)
+    associations = load_associations(session, champion_list, item_payload, universe_champions)
 
     stats = LoadStats(
         factions=len(factions),
@@ -534,6 +519,7 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
         unaffiliated_champions=sum(
             1 for champion in champions if champion.faction_slug == UNAFFILIATED_SLUG
         ),
+        associations=associations,
     )
     logger.info("loaded entities: %s", stats)
     return stats

@@ -13,7 +13,7 @@ from lolrag.config import Settings
 from lolrag.db.models import Ability, AbilityValue, Base, Champion, ItemValue
 from lolrag.fetch import cdragon, cdragon_bin, ddragon
 from lolrag.fetch.client import FetchClient
-from lolrag.ingest.loaders import PASSIVE_SLOT, SPELL_SLOTS
+from lolrag.ingest.identifiers import PASSIVE_SLOT, SPELL_SLOTS
 
 logger = logging.getLogger(__name__)
 

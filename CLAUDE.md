@@ -123,6 +123,7 @@ All corpus content comes from Riot first-party JSON APIs. No scraping.
 ## Commands
 
 - `uv run pytest` — run tests (must pass before any commit)
+- `uv run pytest -m corpus` — full-corpus ingest test (must pass before any commit)
 - `uv run ruff check . && uv run ruff format --check .` — lint/format gate
 - `uv run uvicorn app.main:app --reload` — dev server (Phase 2+)
 

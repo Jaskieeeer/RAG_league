@@ -25,6 +25,8 @@ from lolrag.db.models import (
     item_tag,
     story_champion,
 )
+from lolrag.ingest.associations import AssociationStats
+from lolrag.ingest.identifiers import universe_slug
 from lolrag.ingest.loaders import (
     UNAFFILIATED_SLUG,
     LoadStats,
@@ -38,7 +40,6 @@ from lolrag.ingest.loaders import (
     build_summoner_spells,
     load_all,
     parse_release_date,
-    universe_slug,
 )
 from lolrag.ingest.markup import clean_markup
 from tests.test_fetch_client import build_client, build_settings
@@ -637,6 +638,14 @@ EXPECTED_STATS = LoadStats(
     runes=3,
     summoner_spells=2,
     unaffiliated_champions=1,
+    associations=AssociationStats(
+        champion_roles=3,
+        champion_related=2,
+        story_champions=3,
+        item_tags=3,
+        item_components=1,
+        dropped_edges=0,
+    ),
 )
 
 

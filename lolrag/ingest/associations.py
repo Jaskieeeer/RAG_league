@@ -14,7 +14,7 @@ from lolrag.db.models import (
     item_tag,
     story_champion,
 )
-from lolrag.ingest.loaders import universe_slug
+from lolrag.ingest.identifiers import universe_slug
 
 logger = logging.getLogger(__name__)
 

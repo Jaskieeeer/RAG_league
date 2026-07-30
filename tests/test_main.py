@@ -7,6 +7,14 @@ def test_parser_parses_ingest_command():
     args = _build_parser().parse_args(["ingest"])
 
     assert args.command == "ingest"
+    assert args.refresh is False
+
+
+def test_parser_parses_ingest_refresh_flag():
+    args = _build_parser().parse_args(["ingest", "--refresh"])
+
+    assert args.command == "ingest"
+    assert args.refresh is True
 
 
 def test_parser_parses_ask_command_with_question():
