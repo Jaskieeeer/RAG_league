@@ -17,11 +17,9 @@ def test_parser_parses_ingest_refresh_flag():
     assert args.refresh is True
 
 
-def test_parser_parses_ask_command_with_question():
-    args = _build_parser().parse_args(["ask", "some question"])
-
-    assert args.command == "ask"
-    assert args.question == "some question"
+def test_parser_rejects_removed_ask_command():
+    with pytest.raises(SystemExit):
+        _build_parser().parse_args(["ask", "some question"])
 
 
 def test_parser_rejects_missing_command():

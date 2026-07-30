@@ -12,7 +12,6 @@ from lolrag.config import Settings
 from lolrag.eval.dataset import GoldenDataset, load_golden_dataset
 from lolrag.eval.judge import judge_faithfulness
 from lolrag.eval.metrics import hit_at_k, reciprocal_rank
-from lolrag.indexing import get_vector_store
 
 logger = logging.getLogger(__name__)
 
@@ -104,28 +103,6 @@ def _enable_langsmith(settings: Settings) -> None:
         logger.info("LangSmith tracing disabled")
 
 
-# ---------- preconditions ----------
-
-
-def _ensure_index_populated(settings: Settings) -> None:
-    """Verify the vector store collection contains documents before evaluating.
-
-    Args:
-        settings: Application settings providing vector store configuration.
-
-    Raises:
-        RuntimeError: If the collection is empty, instructing the caller to
-            ingest the corpus first.
-    """
-    vector_store = get_vector_store(settings)
-    count = vector_store._collection.count()
-    if count == 0:
-        raise RuntimeError(
-            "The vector store is empty. Run 'uv run python -m lolrag ingest' to build "
-            "the index before running the evaluation."
-        )
-
-
 # ---------- evaluation ----------
 
 
@@ -140,14 +117,10 @@ def run_evaluation(settings: Settings, dataset: GoldenDataset | None = None) -> 
     Returns:
         EvalReport aggregating retrieval and faithfulness metrics over every
         golden question.
-
-    Raises:
-        RuntimeError: If the vector store is empty.
     """
     if dataset is None:
         dataset = load_golden_dataset()
     _enable_langsmith(settings)
-    _ensure_index_populated(settings)
 
     k = settings.retriever_k
     results: list[QuestionResult] = []

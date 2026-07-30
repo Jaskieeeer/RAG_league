@@ -2,11 +2,7 @@ import pytest
 
 from lolrag.config import get_settings
 from lolrag.eval.dataset import load_golden_dataset
-from lolrag.eval.runner import (
-    _ensure_index_populated,
-    run_evaluation,
-    write_report,
-)
+from lolrag.eval.runner import run_evaluation, write_report
 
 pytestmark = pytest.mark.eval
 
@@ -15,10 +11,6 @@ def test_eval_harness_produces_valid_report(tmp_path):
     settings = get_settings()
     if settings.google_api_key is None:
         pytest.skip("GOOGLE_API_KEY is not set; the eval harness needs a live LLM.")
-    try:
-        _ensure_index_populated(settings)
-    except RuntimeError as error:
-        pytest.skip(str(error))
 
     dataset = load_golden_dataset()
     report = run_evaluation(settings)

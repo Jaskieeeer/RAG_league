@@ -8,18 +8,16 @@ from lolrag.config import Settings, get_settings
 from lolrag.db.session import get_session
 from lolrag.fetch.client import FetchClient
 from lolrag.ingest.run import IngestReport, run_ingest
-from lolrag.pipeline import answer_question
 
 truststore.inject_into_ssl()
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the CLI argument parser with ingest and ask subcommands.
+    """Build the CLI argument parser with the ingest subcommand.
 
     Returns:
         ArgumentParser whose parsed namespace carries a "command" attribute set
-        to "ingest" or "ask", for "ingest" a "refresh" flag, and for "ask" a
-        "question" attribute with the positional question text.
+        to "ingest" and a "refresh" flag.
     """
     parser = argparse.ArgumentParser(
         prog="lolrag",
@@ -36,12 +34,6 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Refetch every cache entry instead of reusing the ones on disk.",
     )
-
-    ask_parser = subparsers.add_parser(
-        "ask",
-        help="Answer a question using the indexed champion corpus.",
-    )
-    ask_parser.add_argument("question", help="Question to answer.")
 
     return parser
 
@@ -106,22 +98,6 @@ def _run_ingest(settings: Settings, *, refresh: bool) -> None:
     _print_report(asyncio.run(_ingest(settings, refresh=refresh)))
 
 
-def _run_ask(question: str, settings: Settings) -> None:
-    """Answer a question and print the answer with its sources.
-
-    Args:
-        question: Question to answer.
-        settings: Application settings for retrieval and generation.
-    """
-    response = answer_question(question, settings)
-    print(response.answer)
-    print()
-    print("Sources:")
-    for source in response.sources:
-        label = source.name if source.name is not None else source.source
-        print(f"- {label} ({source.source})")
-
-
 def main(argv: list[str] | None = None) -> None:
     """Parse CLI arguments and dispatch to the selected command.
 
@@ -133,8 +109,6 @@ def main(argv: list[str] | None = None) -> None:
     settings = get_settings()
     if args.command == "ingest":
         _run_ingest(settings, refresh=args.refresh)
-    elif args.command == "ask":
-        _run_ask(args.question, settings)
 
 
 if __name__ == "__main__":

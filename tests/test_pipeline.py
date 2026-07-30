@@ -2,10 +2,7 @@ import pytest
 from langchain_core.documents import Document
 from pydantic import ValidationError
 
-from lolrag.config import Settings
-from lolrag.indexing import build_index
-from lolrag.pipeline import RagResponse, SourceDocument, answer_question, format_context, retrieve
-from tests.test_ingestion import build_documents
+from lolrag.pipeline import RagResponse, SourceDocument, format_context
 
 
 def test_format_context_includes_document_content():
@@ -95,32 +92,3 @@ def test_rag_response_round_trips_answer_and_sources():
 
     assert response.answer == "Aatrox is a darkin blade."
     assert response.sources == sources
-
-
-@pytest.mark.integration
-def test_retrieve_returns_relevant_champion(tmp_path):
-    settings = Settings(
-        ddragon_version="16.14.1",
-        chroma_persist_dir=str(tmp_path / "chroma"),
-    )
-    build_index(build_documents(), settings)
-
-    documents = retrieve("Tell me about Jinx, the Loose Cannon.", settings)
-
-    assert documents
-    assert any(doc.metadata["champion_id"] == "Jinx" for doc in documents)
-
-
-@pytest.mark.integration
-def test_answer_question_returns_grounded_response(tmp_path):
-    settings = Settings(
-        ddragon_version="16.14.1",
-        chroma_persist_dir=str(tmp_path / "chroma"),
-    )
-    build_index(build_documents(), settings)
-
-    response = answer_question("Tell me about Jinx, the Loose Cannon.", settings)
-
-    assert isinstance(response, RagResponse)
-    assert response.answer
-    assert response.sources

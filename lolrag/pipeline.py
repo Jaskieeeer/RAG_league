@@ -7,7 +7,6 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
 from lolrag.config import Settings
-from lolrag.indexing import get_vector_store
 
 _SYSTEM_PROMPT = (
     "You are a League of Legends knowledge assistant. Answer the question using "
@@ -49,21 +48,6 @@ class RagResponse(BaseModel):
     sources: list[SourceDocument] = Field(
         description="Documents retrieved and used to ground the answer."
     )
-
-
-def retrieve(question: str, settings: Settings) -> list[Document]:
-    """Retrieve the most relevant documents for a question from the vector store.
-
-    Args:
-        question: User question to retrieve context for.
-        settings: Application settings providing retriever_k and vector store
-            configuration.
-
-    Returns:
-        Up to settings.retriever_k Documents most relevant to question.
-    """
-    retriever = get_vector_store(settings).as_retriever(search_kwargs={"k": settings.retriever_k})
-    return retriever.invoke(question)
 
 
 def format_context(documents: list[Document]) -> str:
@@ -149,26 +133,3 @@ def generate(question: str, documents: list[Document], settings: Settings) -> st
     )
     response = llm.invoke(messages)
     return str(response.text)
-
-
-def answer_question(question: str, settings: Settings) -> RagResponse:
-    """Answer a question end to end: retrieve context, generate, cite sources.
-
-    Args:
-        question: User question to answer.
-        settings: Application settings for retrieval and generation.
-
-    Returns:
-        RagResponse with the generated answer and the sources it was grounded in.
-    """
-    documents = retrieve(question, settings)
-    answer = generate(question, documents, settings)
-    sources = [
-        SourceDocument(
-            champion_id=doc.metadata.get("champion_id"),
-            name=doc.metadata.get("name"),
-            source=doc.metadata["source"],
-        )
-        for doc in documents
-    ]
-    return RagResponse(answer=answer, sources=sources)

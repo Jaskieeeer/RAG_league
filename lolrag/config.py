@@ -20,8 +20,6 @@ class Settings(BaseSettings):
         http_timeout_seconds: Per-request timeout for corpus fetches.
         http_max_retries: Maximum attempts per request before giving up.
         embedding_model_name: HuggingFace embedding model identifier.
-        chroma_persist_dir: Filesystem path for the persistent Chroma store.
-        chroma_collection_name: Chroma collection name.
         retriever_k: Number of documents the retriever returns per query.
         google_api_key: Gemini API key, kept out of logs and reprs.
         llm_model_name: Gemini chat model identifier.
@@ -51,9 +49,6 @@ class Settings(BaseSettings):
     http_max_retries: int = 3
 
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
-
-    chroma_persist_dir: str = "./data/chroma"
-    chroma_collection_name: str = "lol_champions"
 
     retriever_k: int = 4
 
