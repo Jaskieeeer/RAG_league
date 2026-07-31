@@ -46,6 +46,8 @@ SCALING_STAT_BY_CODE = {
     12: "health",
 }
 
+STAT_FORMULA_BY_CODE = {0: "total", 2: "bonus"}
+
 DAMAGE_TYPE_BY_TAG = {
     "magicDamage": "magic",
     "physicalDamage": "physical",
@@ -69,6 +71,7 @@ CALCULATION_REFERENCE_KEYS = frozenset(
 
 _UNSCALED = "__unscaled__"
 _UNDECODED_STAT = "__undecoded__"
+_UNDECODED_FORMULA = "__undecoded_formula__"
 
 _DAMAGE_TAG_PATTERN = re.compile(r"<(magicDamage|physicalDamage|trueDamage)>(.*?)</\1>", re.DOTALL)
 _TOKEN_PATTERN = re.compile(r"@([^@]+)@")
@@ -223,6 +226,9 @@ class ValueAttributes:
         scaling_stat: Champion stat the value scales with, or None when it does
             not scale, the source enum is undecoded, or two calculations
             disagree.
+        stat_formula: Which amount of that stat the value applies to, one of
+            total, bonus, or None when the value does not scale, the source enum
+            is undecoded, or two calculations disagree.
         damage_type: Damage type the value contributes, or None when no
             calculation declares one or two calculations disagree.
         display_as_percent: Whether the referencing calculation displays its
@@ -230,8 +236,28 @@ class ValueAttributes:
     """
 
     scaling_stat: str | None = None
+    stat_formula: str | None = None
     damage_type: str | None = None
     display_as_percent: bool = False
+
+
+@dataclass(frozen=True)
+class _CalculationLeaf:
+    """One data value a calculation reaches, with what its enclosing part declares.
+
+    Args:
+        name: Source name of the data value the leaf refers to.
+        stat: Scaling stat inherited from an enclosing stat-scaling part, the
+            undecoded sentinel when that part's enum has no known meaning, or
+            the unscaled sentinel when no such part encloses the leaf.
+        stat_formula: Which amount of that stat the enclosing part applies the
+            value to, the undecoded sentinel when its enum has no known meaning,
+            or None when no stat encloses the leaf.
+    """
+
+    name: str
+    stat: str
+    stat_formula: str | None
 
 
 def parse_damage_types(dynamic_description: str | None) -> dict[str, str]:
@@ -275,6 +301,7 @@ def resolve_value_attributes(
         gets None for it rather than an arbitrary winner.
     """
     stats: dict[str, set[str]] = defaultdict(set)
+    formulas: dict[str, set[str]] = defaultdict(set)
     damage: dict[str, set[str]] = defaultdict(set)
     percent: dict[str, set[bool]] = defaultdict(set)
 
@@ -283,18 +310,21 @@ def resolve_value_attributes(
         declared_percent = (
             calculation.get("mDisplayAsPercent") if isinstance(calculation, dict) else None
         )
-        for leaf, stat in _calculation_leaves(name, spell_calculations):
-            if stat != _UNSCALED:
-                stats[leaf].add(stat)
+        for leaf in _calculation_leaves(name, spell_calculations):
+            if leaf.stat != _UNSCALED:
+                stats[leaf.name].add(leaf.stat)
+            if leaf.stat_formula is not None:
+                formulas[leaf.name].add(leaf.stat_formula)
             if declared_damage is not None:
-                damage[leaf].add(declared_damage)
+                damage[leaf.name].add(declared_damage)
             if declared_percent is not None:
-                percent[leaf].add(bool(declared_percent))
+                percent[leaf.name].add(bool(declared_percent))
 
-    names = set(stats) | set(damage) | set(percent)
+    names = set(stats) | set(formulas) | set(damage) | set(percent)
     return {
         name: ValueAttributes(
             scaling_stat=_single_stat(stats.get(name)),
+            stat_formula=_single_formula(formulas.get(name)),
             damage_type=_single(damage.get(name)),
             display_as_percent=bool(_single(percent.get(name))),
         )
@@ -335,6 +365,23 @@ def _single_stat(values: set[str] | None) -> str | None:
     return stat
 
 
+def _single_formula(values: set[str] | None) -> str | None:
+    """Return the sole declared stat formula, discarding undecoded source enums.
+
+    Args:
+        values: Stat formulas collected from every referencing calculation.
+
+    Returns:
+        The single declared formula, or None when the source declared nothing,
+        declared two different formulas, or used an enum value with no known
+        meaning.
+    """
+    formula = _single(values)
+    if formula == _UNDECODED_FORMULA:
+        return None
+    return formula
+
+
 def _stat_of(part: Mapping[str, Any]) -> str:
     """Decode the mStat enum of a stat-scaling calculation part.
 
@@ -350,14 +397,38 @@ def _stat_of(part: Mapping[str, Any]) -> str:
     return SCALING_STAT_BY_CODE.get(part.get("mStat", 0), _UNDECODED_STAT)
 
 
-def _walk_part(node: Any, stat: str, leaves: list[tuple[str, str]], references: list[str]) -> None:
+def _formula_of(part: Mapping[str, Any]) -> str:
+    """Decode the mStatFormula enum of a stat-scaling calculation part.
+
+    Args:
+        part: A StatByNamedDataValueCalculationPart or
+            StatBySubPartCalculationPart object.
+
+    Returns:
+        Which amount of the part's stat the value applies to. These bins omit any
+        field holding its default, so an absent mStatFormula means 0, which is
+        the total stat. Enum value 1 carries no proven meaning and, like any
+        other unknown code, resolves to a sentinel that later becomes NULL.
+    """
+    return STAT_FORMULA_BY_CODE.get(part.get("mStatFormula", 0), _UNDECODED_FORMULA)
+
+
+def _walk_part(
+    node: Any,
+    stat: str,
+    stat_formula: str | None,
+    leaves: list[_CalculationLeaf],
+    references: list[str],
+) -> None:
     """Collect the data values and calculation references under one formula node.
 
     Args:
         node: Any node of a calculation formula graph.
         stat: Scaling stat inherited from an enclosing stat-scaling part, or the
             unscaled sentinel.
-        leaves: Accumulator receiving (data value name, scaling stat) pairs.
+        stat_formula: Stat formula inherited from that same part, or None when
+            no stat encloses the node.
+        leaves: Accumulator receiving one _CalculationLeaf per data value.
         references: Accumulator receiving the names of other calculations this
             node defers to.
 
@@ -367,25 +438,31 @@ def _walk_part(node: Any, stat: str, leaves: list[tuple[str, str]], references: 
     if isinstance(node, dict):
         node_type = node.get("__type")
         if node_type == STAT_BY_NAMED_DATA_VALUE_TYPE:
-            leaves.append((node["mDataValue"], _stat_of(node)))
+            leaves.append(
+                _CalculationLeaf(
+                    name=node["mDataValue"], stat=_stat_of(node), stat_formula=_formula_of(node)
+                )
+            )
             return
         if node_type == STAT_BY_SUB_PART_TYPE:
-            _walk_part(node.get("mSubpart"), _stat_of(node), leaves, references)
+            _walk_part(node.get("mSubpart"), _stat_of(node), _formula_of(node), leaves, references)
             return
         if node_type in NAMED_DATA_VALUE_TYPES:
-            leaves.append((node["mDataValue"], stat))
+            leaves.append(
+                _CalculationLeaf(name=node["mDataValue"], stat=stat, stat_formula=stat_formula)
+            )
             return
         for key, value in node.items():
             if key in CALCULATION_REFERENCE_KEYS and isinstance(value, str):
                 references.append(value)
                 continue
-            _walk_part(value, stat, leaves, references)
+            _walk_part(value, stat, stat_formula, leaves, references)
     elif isinstance(node, list):
         for value in node:
-            _walk_part(value, stat, leaves, references)
+            _walk_part(value, stat, stat_formula, leaves, references)
 
 
-def _calculation_leaves(name: str, spell_calculations: Mapping[str, Any]) -> list[tuple[str, str]]:
+def _calculation_leaves(name: str, spell_calculations: Mapping[str, Any]) -> list[_CalculationLeaf]:
     """Collect every data value one calculation reaches, following its references.
 
     Args:
@@ -393,11 +470,11 @@ def _calculation_leaves(name: str, spell_calculations: Mapping[str, Any]) -> lis
         spell_calculations: The spell's mSpellCalculations object.
 
     Returns:
-        (data value name, scaling stat) pairs for the calculation and for every
-        calculation it defers to, so a tooltip that names a modified calculation
-        still reaches the values the base calculation sums.
+        One _CalculationLeaf per data value the calculation reaches and per data
+        value every calculation it defers to reaches, so a tooltip that names a
+        modified calculation still reaches the values the base calculation sums.
     """
-    leaves: list[tuple[str, str]] = []
+    leaves: list[_CalculationLeaf] = []
     pending = [name]
     visited: set[str] = set()
     while pending:
@@ -406,7 +483,7 @@ def _calculation_leaves(name: str, spell_calculations: Mapping[str, Any]) -> lis
             continue
         visited.add(current)
         references: list[str] = []
-        _walk_part(spell_calculations[current], _UNSCALED, leaves, references)
+        _walk_part(spell_calculations[current], _UNSCALED, None, leaves, references)
         pending.extend(references)
     return leaves
 
@@ -559,6 +636,7 @@ def _build_spell_values(
                 kind=row_kind,
                 values=values,
                 scaling_stat=attrs.scaling_stat,
+                stat_formula=attrs.stat_formula,
                 damage_type=attrs.damage_type,
                 display_as_percent=attrs.display_as_percent,
                 source=SOURCE_CDRAGON,

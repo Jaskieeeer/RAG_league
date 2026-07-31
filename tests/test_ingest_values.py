@@ -615,6 +615,88 @@ def test_resolve_value_attributes_reads_a_stat_through_a_subpart() -> None:
     assert attributes["HealthRatio"].scaling_stat == "health"
 
 
+def stat_scaling_calculation(part: Mapping[str, Any]) -> dict[str, Any]:
+    """Wrap one stat-scaling formula part in the calculation that owns it.
+
+    Args:
+        part: Fields of a StatByNamedDataValueCalculationPart, without its
+            __type, so a test states only the enums it is about.
+
+    Returns:
+        A GameCalculation whose single formula part is that stat-scaling part.
+    """
+    return {
+        "mFormulaParts": [dict(part) | {"__type": "StatByNamedDataValueCalculationPart"}],
+        "__type": "GameCalculation",
+    }
+
+
+def test_resolve_value_attributes_reads_an_absent_mstatformula_as_the_total_stat() -> None:
+    """These bins omit a field at its default, and the mStatFormula default is the total stat."""
+    calculations = {"Damage": stat_scaling_calculation({"mStat": 2, "mDataValue": "Ratio"})}
+
+    attributes = resolve_value_attributes(calculations, {})
+
+    assert attributes["Ratio"].scaling_stat == "ad"
+    assert attributes["Ratio"].stat_formula == "total"
+
+
+def test_resolve_value_attributes_reads_mstatformula_two_as_the_bonus_stat() -> None:
+    """A coefficient declaring mStatFormula 2 applies to the bonus amount of its stat."""
+    calculations = {
+        "Damage": stat_scaling_calculation(
+            {"mStat": 2, "mStatFormula": 2, "mDataValue": "BonusRatio"}
+        )
+    }
+
+    attributes = resolve_value_attributes(calculations, {})
+
+    assert attributes["BonusRatio"].scaling_stat == "ad"
+    assert attributes["BonusRatio"].stat_formula == "bonus"
+
+
+def test_resolve_value_attributes_leaves_an_undecoded_mstatformula_null() -> None:
+    """Enum value 1 has no proven meaning, so it is left NULL rather than guessed."""
+    calculations = {
+        "Damage": stat_scaling_calculation({"mStat": 2, "mStatFormula": 1, "mDataValue": "Ratio"})
+    }
+
+    attributes = resolve_value_attributes(calculations, {})
+
+    assert attributes["Ratio"].scaling_stat == "ad"
+    assert attributes["Ratio"].stat_formula is None
+
+
+def test_resolve_value_attributes_nulls_a_formula_two_calculations_disagree_on() -> None:
+    """One value read as total AD by one calculation and as bonus AD by another gets neither."""
+    calculations = {
+        "First": stat_scaling_calculation({"mStat": 2, "mDataValue": "Ratio"}),
+        "Second": stat_scaling_calculation({"mStat": 2, "mStatFormula": 2, "mDataValue": "Ratio"}),
+    }
+
+    attributes = resolve_value_attributes(calculations, {})
+
+    assert attributes["Ratio"].scaling_stat == "ad"
+    assert attributes["Ratio"].stat_formula is None
+
+
+def test_resolve_value_attributes_gives_an_unscaled_value_no_formula() -> None:
+    """A value no stat-scaling part encloses scales with nothing, so no formula applies to it."""
+    calculations = {
+        "Damage": {
+            "mFormulaParts": [
+                {"mDataValue": "BaseDamage", "__type": "NamedDataValueCalculationPart"}
+            ],
+            "__type": "GameCalculation",
+        }
+    }
+
+    attributes = resolve_value_attributes(calculations, {"Damage": "magic"})
+
+    assert attributes["BaseDamage"].scaling_stat is None
+    assert attributes["BaseDamage"].stat_formula is None
+
+
 # ---------- ability value tests ----------
 
 

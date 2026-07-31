@@ -47,6 +47,8 @@ EXPECTED_SPELLS_RESOLVED = 560
 EXPECTED_SPELLS_UNRESOLVED = 132
 EXPECTED_PASSIVES = 173
 
+EXPECTED_STAT_FORMULAS = {"total": 459, "bonus": 165, "none": 6628}
+
 
 @pytest.fixture
 def db_session() -> Iterator[Session]:
@@ -164,6 +166,32 @@ def tooltip_counts(session: Session) -> dict[str, int]:
     }
 
 
+def stat_formula_counts(session: Session) -> dict[str, int]:
+    """Count the stored ability values by the stat formula they resolved to.
+
+    Args:
+        session: Session the counts are read through.
+
+    Returns:
+        Mapping with the number of rows applying to the total amount of their
+        scaling stat, the number applying to the bonus amount, and the number
+        whose formula is NULL, which are every value no stat-scaling part
+        encloses plus the few whose calculations disagree or whose source enum
+        has no proven meaning.
+    """
+
+    def count(*conditions: Any) -> int:
+        return session.execute(
+            select(func.count()).select_from(AbilityValue).where(*conditions)
+        ).scalar_one()
+
+    return {
+        "total": count(AbilityValue.stat_formula == "total"),
+        "bonus": count(AbilityValue.stat_formula == "bonus"),
+        "none": count(AbilityValue.stat_formula.is_(None)),
+    }
+
+
 async def test_run_ingest_resolves_the_measured_share_of_tooltips(db_session: Session) -> None:
     """The corpus splits into resolved spells, blocked spells and passives that publish none."""
     settings = get_settings()
@@ -195,6 +223,7 @@ async def test_run_ingest_loads_the_full_corpus_and_repeats_it_identically(
     assert first_counts == EXPECTED_COUNTS
     assert second_counts == EXPECTED_COUNTS
     assert second_hash == first_hash
+    assert stat_formula_counts(db_session) == EXPECTED_STAT_FORMULAS
 
     values = ability_values_by_name(db_session, "aatrox", "Q", AATROX_Q_SPELL_KEY)
 

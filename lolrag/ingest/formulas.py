@@ -8,6 +8,7 @@ from lolrag.ingest.values import (
     SCALING_STAT_BY_CODE,
     STAT_BY_NAMED_DATA_VALUE_TYPE,
     STAT_BY_SUB_PART_TYPE,
+    STAT_FORMULA_BY_CODE,
     slice_ranks,
 )
 
@@ -27,8 +28,6 @@ NON_OBJECT_TYPE = "NonObjectCalculationPart"
 
 MODIFIED_REFERENCE_KEY = "mModifiedGameCalculation"
 DAMAGE_TYPE_FIELD = "{72c5c2a8}"
-
-STAT_FORMULA_BY_CODE = {0: "total", 2: "bonus"}
 
 RECOGNISED_FIELDS = {
     GAME_CALCULATION_TYPE: frozenset(

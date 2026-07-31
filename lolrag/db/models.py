@@ -292,6 +292,9 @@ class AbilityValue(Base):
         scaling_stat: Champion stat this value scales with, one of ap, ad,
             armor, magic_resist, attack_speed, crit, health; nullable when the
             value does not scale or the source enum is undecoded.
+        stat_formula: Which amount of the scaling stat this value applies to,
+            one of total, bonus; nullable when the value does not scale or the
+            source enum is undecoded.
         damage_type: Damage type this value applies to, one of magic, physical,
             true; nullable when the source declares no damage type.
         display_as_percent: Source hint that the value is displayed as a
@@ -314,6 +317,7 @@ class AbilityValue(Base):
             "scaling_stat IN ('ap','ad','armor','magic_resist','attack_speed','crit','health')",
             name="ck_ability_values_scaling_stat",
         ),
+        CheckConstraint("stat_formula IN ('total','bonus')", name="ck_ability_values_stat_formula"),
         CheckConstraint(
             "damage_type IN ('magic','physical','true')", name="ck_ability_values_damage_type"
         ),
@@ -329,6 +333,7 @@ class AbilityValue(Base):
     kind: Mapped[str] = mapped_column(String(16))
     values: Mapped[list[float]] = mapped_column(ARRAY(Float))
     scaling_stat: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    stat_formula: Mapped[str | None] = mapped_column(String(16), nullable=True)
     damage_type: Mapped[str | None] = mapped_column(String(16), nullable=True)
     display_as_percent: Mapped[bool] = mapped_column(default=False)
     source: Mapped[str] = mapped_column(String(16))
