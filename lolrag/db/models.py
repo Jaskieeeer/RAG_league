@@ -52,6 +52,13 @@ item_tag = Table(
     Column("tag", String(64), primary_key=True),
 )
 
+item_map = Table(
+    "item_map",
+    Base.metadata,
+    Column("item_id", ForeignKey("items.ddragon_id", ondelete="CASCADE"), primary_key=True),
+    Column("map_id", Integer, primary_key=True),
+)
+
 item_components = Table(
     "item_components",
     Base.metadata,
@@ -237,6 +244,11 @@ class Item(Base):
         gold_base: Base gold cost, excluding component value.
         depth: Number of build steps from base items, nullable; only a
             subset of items carry this in the source.
+        purchasable: Source gold.purchasable flag, False for the engine-side
+            entries a player can never buy.
+        in_store: Source inStore flag, False for entries the shop never lists.
+            The source omits it far more often than it publishes it, and an
+            absent flag means True.
     """
 
     __tablename__ = "items"
@@ -249,6 +261,8 @@ class Item(Base):
     gold_total: Mapped[int] = mapped_column()
     gold_base: Mapped[int] = mapped_column()
     depth: Mapped[int | None] = mapped_column(nullable=True)
+    purchasable: Mapped[bool] = mapped_column()
+    in_store: Mapped[bool] = mapped_column()
 
     components: Mapped[list["Item"]] = relationship(
         "Item",
@@ -541,7 +555,7 @@ class Document(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    doc_key: Mapped[str] = mapped_column(String(64), unique=True)
+    doc_key: Mapped[str] = mapped_column(String(160), unique=True)
     collection: Mapped[str] = mapped_column(String(32))
 
     champion_slug: Mapped[str | None] = mapped_column(

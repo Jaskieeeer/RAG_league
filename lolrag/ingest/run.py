@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from lolrag.config import Settings
 from lolrag.fetch.client import FetchClient
 from lolrag.fetch.corpus import CorpusCacheStats, warm_cache
+from lolrag.ingest.documents import DocumentLoadStats, load_documents
 from lolrag.ingest.loaders import LoadStats, load_all
 from lolrag.ingest.values import ValueLoadStats, load_values
 
@@ -20,11 +21,13 @@ class IngestReport:
         cache: Counts describing the cache-warming stage.
         entities: Counts describing the entity and association load stage.
         values: Counts describing the numeric value load stage.
+        documents: Counts describing the document and chunk load stage.
     """
 
     cache: CorpusCacheStats
     entities: LoadStats
     values: ValueLoadStats
+    documents: DocumentLoadStats
 
 
 async def run_ingest(
@@ -48,16 +51,20 @@ async def run_ingest(
             reusing existing ones.
 
     Returns:
-        IngestReport composing the stats of all three stages.
+        IngestReport composing the stats of all four stages. The document stage
+        runs last because it reads the entity and value rows the earlier stages
+        wrote, and it embeds only the documents whose content actually changed.
 
     Raises:
         httpx.HTTPStatusError: If any request fails after its retries.
         sqlalchemy.exc.SQLAlchemyError: If any row violates the schema.
         ValueError: If a Data Dragon spell cannot be joined to the bin.
+        KeyError: If an item is available on a map id MAP_NAMES does not name.
     """
     cache = await warm_cache(settings, refresh=refresh)
     entities = await load_all(session, client, settings)
     values = await load_values(session, client, settings)
-    report = IngestReport(cache=cache, entities=entities, values=values)
+    documents = load_documents(session, settings)
+    report = IngestReport(cache=cache, entities=entities, values=values, documents=documents)
     logger.info("ingest complete: %s", report)
     return report

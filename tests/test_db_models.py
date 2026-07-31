@@ -39,6 +39,7 @@ _EXPECTED_TABLES = {
     "champion_related",
     "story_champion",
     "item_tag",
+    "item_map",
     "item_components",
     "ability_values",
     "item_values",
@@ -160,6 +161,8 @@ def test_item_components_and_builds_into_are_populated_in_both_directions(
         description_text="Parent description",
         gold_total=3000,
         gold_base=1000,
+        purchasable=True,
+        in_store=True,
     )
     component_one = Item(
         ddragon_id="9002",
@@ -168,6 +171,8 @@ def test_item_components_and_builds_into_are_populated_in_both_directions(
         description_text="Component one description",
         gold_total=1000,
         gold_base=1000,
+        purchasable=True,
+        in_store=True,
     )
     component_two = Item(
         ddragon_id="9003",
@@ -176,6 +181,8 @@ def test_item_components_and_builds_into_are_populated_in_both_directions(
         description_text="Component two description",
         gold_total=1000,
         gold_base=1000,
+        purchasable=True,
+        in_store=True,
     )
     db_session.add_all([parent, component_one, component_two])
     db_session.flush()
@@ -375,6 +382,8 @@ def _make_item(db_session: Session, ddragon_id: str) -> Item:
         description_text="Test description",
         gold_total=3000,
         gold_base=1000,
+        purchasable=True,
+        in_store=True,
     )
     db_session.add(item)
     db_session.flush()

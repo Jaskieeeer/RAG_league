@@ -759,6 +759,7 @@ EXPECTED_STATS = LoadStats(
         champion_related=2,
         story_champions=3,
         item_tags=3,
+        item_maps=0,
         item_components=1,
         dropped_edges=0,
     ),

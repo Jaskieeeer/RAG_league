@@ -291,9 +291,13 @@ def build_items(payload: dict) -> list[Item]:
             optional "from" list of component ids.
 
     Returns:
-        One Item per record. Recipes are not attached here because a component
-        link carries a quantity, which the plain many-to-many relationship
-        cannot express; the association loader writes those rows instead.
+        One Item per record, every raw row kept. Recipes are not attached here
+        because a component link carries a quantity, which the plain
+        many-to-many relationship cannot express; the association loader writes
+        those rows instead. purchasable and in_store are stored so the document
+        builder can tell shop content from engine-side entries in SQL; the
+        source omits inStore far more often than it publishes it, so an absent
+        flag is read as True.
     """
     return [
         Item(
@@ -305,6 +309,8 @@ def build_items(payload: dict) -> list[Item]:
             gold_total=record["gold"]["total"],
             gold_base=record["gold"]["base"],
             depth=record.get("depth"),
+            purchasable=bool(record["gold"].get("purchasable")),
+            in_store=record.get("inStore") is not False,
         )
         for item_id, record in payload["data"].items()
     ]

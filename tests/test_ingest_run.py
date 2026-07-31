@@ -8,8 +8,9 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from lolrag.config import get_settings
-from lolrag.db.models import Ability, AbilityValue, Base, story_champion
+from lolrag.db.models import Ability, AbilityValue, Base, Document, story_champion
 from lolrag.fetch.client import FetchClient
+from lolrag.ingest.documents import ENTITY_COLUMNS, load_documents
 from lolrag.ingest.identifiers import PASSIVE_SLOT
 from lolrag.ingest.run import run_ingest
 
@@ -36,10 +37,25 @@ EXPECTED_COUNTS = {
     "champion_related": 556,
     "story_champion": 260,
     "item_tag": 2402,
+    "item_map": 1342,
     "item_components": 508,
-    "documents": 0,
-    "chunks": 0,
+    "documents": 1844,
+    "chunks": 7499,
 }
+
+EXPECTED_DOCUMENTS_BY_COLLECTION = {"abilities": 865, "equipment": 592, "lore": 387}
+
+DOC_KEY_PREFIX_COLLECTIONS = {
+    "ability": ("abilities", "ability_id"),
+    "item": ("equipment", "item_id"),
+    "rune": ("equipment", "rune_id"),
+    "summoner_spell": ("equipment", "summoner_spell_id"),
+    "champion": ("lore", "champion_slug"),
+    "story": ("lore", "story_slug"),
+    "faction": ("lore", "faction_slug"),
+}
+
+DOC_KEY_WIDTH = 160
 
 AATROX_Q_SPELL_KEY = "AatroxQ"
 
@@ -190,6 +206,50 @@ def stat_formula_counts(session: Session) -> dict[str, int]:
         "bonus": count(AbilityValue.stat_formula == "bonus"),
         "none": count(AbilityValue.stat_formula.is_(None)),
     }
+
+
+async def test_run_ingest_gives_every_document_the_collection_its_entity_belongs_to(
+    db_session: Session,
+) -> None:
+    """Each of the 1844 documents lands in its entity's collection with exactly one entity key."""
+    settings = get_settings()
+    async with FetchClient(settings) as client:
+        await run_ingest(db_session, client, settings)
+
+    documents = db_session.execute(select(Document)).scalars().all()
+    assert len(documents) == sum(EXPECTED_DOCUMENTS_BY_COLLECTION.values())
+
+    by_collection: dict[str, int] = {}
+    for document in documents:
+        prefix = document.doc_key.split(":", 1)[0]
+        collection, entity_column = DOC_KEY_PREFIX_COLLECTIONS[prefix]
+        assert document.collection == collection, document.doc_key
+        set_columns = [column for column in ENTITY_COLUMNS if getattr(document, column) is not None]
+        assert set_columns == [entity_column], document.doc_key
+        assert len(document.doc_key) <= DOC_KEY_WIDTH, document.doc_key
+        by_collection[collection] = by_collection.get(collection, 0) + 1
+
+    assert by_collection == EXPECTED_DOCUMENTS_BY_COLLECTION
+
+
+async def test_run_ingest_re_embeds_nothing_when_the_documents_are_unchanged(
+    db_session: Session,
+) -> None:
+    """The conditional upsert means a rebuild over a static corpus costs zero embeddings."""
+    settings = get_settings()
+    async with FetchClient(settings) as client:
+        report = await run_ingest(db_session, client, settings)
+
+    assert report.documents.documents_built == EXPECTED_COUNTS["documents"]
+    assert report.documents.documents_changed == EXPECTED_COUNTS["documents"]
+    assert report.documents.chunks_written == EXPECTED_COUNTS["chunks"]
+
+    second = load_documents(db_session, settings)
+
+    assert second.documents_built == EXPECTED_COUNTS["documents"]
+    assert second.documents_changed == 0
+    assert second.chunks_written == 0
+    assert second.chunks_skipped == EXPECTED_COUNTS["chunks"]
 
 
 async def test_run_ingest_resolves_the_measured_share_of_tooltips(db_session: Session) -> None:

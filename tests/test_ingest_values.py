@@ -1210,6 +1210,8 @@ def seed_entities(session: Session) -> None:
                 description_text=record["name"],
                 gold_total=record["gold"]["total"],
                 gold_base=record["gold"]["base"],
+                purchasable=True,
+                in_store=True,
             )
         )
     session.flush()

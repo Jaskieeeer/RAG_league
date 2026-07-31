@@ -376,6 +376,7 @@ EXPECTED_STATS = AssociationStats(
     champion_related=2,
     story_champions=5,
     item_tags=3,
+    item_maps=0,
     item_components=1,
     dropped_edges=0,
 )
@@ -465,6 +466,8 @@ def seed_entities(session: Session) -> None:
                 description_text="Item.",
                 gold_total=1200,
                 gold_base=500,
+                purchasable=True,
+                in_store=True,
             )
         )
     session.flush()

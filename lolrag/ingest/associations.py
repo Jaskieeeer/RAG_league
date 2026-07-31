@@ -11,6 +11,7 @@ from lolrag.db.models import (
     champion_related,
     champion_role,
     item_components,
+    item_map,
     item_tag,
     story_champion,
 )
@@ -186,6 +187,35 @@ def build_item_tags(item_payload: dict, item_ids: set[str]) -> Edges:
     return Edges(rows=rows, dropped=dropped)
 
 
+def build_item_maps(item_payload: dict, item_ids: set[str]) -> Edges:
+    """Build the item_map rows from the Data Dragon per-map availability flags.
+
+    Args:
+        item_payload: Parsed Data Dragon item.json body, whose "data" key maps
+            item id to a record carrying an optional "maps" object of map id to
+            a boolean saying whether the item is buyable on that map.
+        item_ids: Ids of the items that will exist, used to drop edges pointing
+            at an item the loader never persists.
+
+    Returns:
+        Edges holding one row per (item id, map id) pair the source marks true.
+        A false flag writes nothing, so the table states availability by
+        presence rather than by a stored boolean. Items available on no map at
+        all contribute nothing, which is how the document builder tells live
+        content from debug and removed content.
+    """
+    rows: list[dict[str, Any]] = []
+    dropped = 0
+    for item_id, record in item_payload["data"].items():
+        available = [map_id for map_id, value in (record.get("maps") or {}).items() if value]
+        if item_id not in item_ids:
+            _log_dangling("item_map", (item_id, ",".join(available)), item_id)
+            dropped += len(available)
+            continue
+        rows.extend({"item_id": item_id, "map_id": int(map_id)} for map_id in available)
+    return Edges(rows=rows, dropped=dropped)
+
+
 def build_item_components(item_payload: dict, item_ids: set[str]) -> Edges:
     """Build the item_components rows, counting repeated components.
 
@@ -230,8 +260,9 @@ class AssociationStats:
         champion_related: Number of champion_related rows persisted.
         story_champions: Number of story_champion rows persisted.
         item_tags: Number of item_tag rows persisted.
+        item_maps: Number of item_map rows persisted.
         item_components: Number of item_components rows persisted.
-        dropped_edges: Edges discarded across all five tables because an
+        dropped_edges: Edges discarded across all six tables because an
             endpoint resolved to no entity row.
     """
 
@@ -239,6 +270,7 @@ class AssociationStats:
     champion_related: int
     story_champions: int
     item_tags: int
+    item_maps: int
     item_components: int
     dropped_edges: int
 
@@ -279,8 +311,8 @@ def load_associations(
             endpoint of every edge is a real foreign key.
         champion_list: Parsed Data Dragon champion.json body, supplying the
             class tags.
-        item_payload: Parsed Data Dragon item.json body, supplying the item tags
-            and build recipes.
+        item_payload: Parsed Data Dragon item.json body, supplying the item tags,
+            the per-map availability flags and the build recipes.
         universe_champions: Mapping of Universe champion slug to that champion's
             parsed Universe payload, supplying the related-champion edges and
             the story modules. Its keys are the authoritative champion roster.
@@ -299,12 +331,14 @@ def load_associations(
     related = build_champion_related(universe_champions, champion_slugs)
     stories = build_story_champions(universe_champions, champion_slugs)
     tags = build_item_tags(item_payload, item_ids)
+    maps = build_item_maps(item_payload, item_ids)
     components = build_item_components(item_payload, item_ids)
 
     _replace(session, champion_role, roles.rows)
     _replace(session, champion_related, related.rows)
     _replace(session, story_champion, stories.rows)
     _replace(session, item_tag, tags.rows)
+    _replace(session, item_map, maps.rows)
     _replace(session, item_components, components.rows)
     session.flush()
 
@@ -313,11 +347,13 @@ def load_associations(
         champion_related=len(related.rows),
         story_champions=len(stories.rows),
         item_tags=len(tags.rows),
+        item_maps=len(maps.rows),
         item_components=len(components.rows),
         dropped_edges=roles.dropped
         + related.dropped
         + stories.dropped
         + tags.dropped
+        + maps.dropped
         + components.dropped,
     )
     logger.info("loaded associations: %s", stats)
