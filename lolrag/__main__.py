@@ -9,16 +9,18 @@ from lolrag.db.session import get_session
 from lolrag.fetch.client import FetchClient
 from lolrag.ingest.documents import DocumentLoadStats, load_documents
 from lolrag.ingest.run import IngestReport, run_ingest
+from lolrag.pipeline import RagResponse, answer_question
 
 truststore.inject_into_ssl()
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    """Build the CLI argument parser with the ingest and index subcommands.
+    """Build the CLI argument parser with the ingest, index and ask subcommands.
 
     Returns:
         ArgumentParser whose parsed namespace carries a "command" attribute set
-        to "ingest" or "index", and a "refresh" flag on "ingest".
+        to "ingest", "index" or "ask", a "refresh" flag on "ingest" and a
+        "question" string on "ask".
     """
     parser = argparse.ArgumentParser(
         prog="lolrag",
@@ -40,6 +42,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "index",
         help="Rebuild documents and chunks from the entity rows already in Postgres.",
     )
+
+    ask_parser = subparsers.add_parser(
+        "ask",
+        help="Answer one question against the indexed corpus and cite its sources.",
+    )
+    ask_parser.add_argument("question", help="The question to answer.")
 
     return parser
 
@@ -75,6 +83,21 @@ def _index(settings: Settings) -> DocumentLoadStats:
         stats = load_documents(session, settings)
         session.commit()
     return stats
+
+
+def _ask(settings: Settings, question: str) -> RagResponse:
+    """Answer one question inside a read-only session.
+
+    Args:
+        settings: Application settings for retrieval and generation.
+        question: The question to answer.
+
+    Returns:
+        The RagResponse holding the answer and its ranked sources. Nothing is
+        written, so the session is never committed.
+    """
+    with get_session(settings) as session:
+        return answer_question(question, session, settings)
 
 
 def _print_document_stats(stats: DocumentLoadStats, width: int) -> None:
@@ -147,6 +170,23 @@ def _run_index(settings: Settings) -> None:
     _print_document_stats(stats, len("documents changed"))
 
 
+def _run_ask(settings: Settings, question: str) -> None:
+    """Answer one question and print the answer above its ranked sources.
+
+    Args:
+        settings: Application settings for retrieval and generation.
+        question: The question to answer.
+    """
+    response = _ask(settings, question)
+    print(response.answer)
+    print()
+    print("Sources:")
+    for rank, source in enumerate(response.sources, start=1):
+        print(f"{rank}. {source.doc_key} chunk {source.chunk_index} [{source.collection}]")
+        print(f"   {source.title}")
+        print(f"   {source.source}")
+
+
 def main(argv: list[str] | None = None) -> None:
     """Parse CLI arguments and dispatch to the selected command.
 
@@ -160,6 +200,8 @@ def main(argv: list[str] | None = None) -> None:
         _run_ingest(settings, refresh=args.refresh)
     elif args.command == "index":
         _run_index(settings)
+    elif args.command == "ask":
+        _run_ask(settings, args.question)
 
 
 if __name__ == "__main__":

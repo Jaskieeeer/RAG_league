@@ -5,8 +5,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from lolrag.config import Settings
+from lolrag.retrieval import PgVectorRetriever
 
 _SYSTEM_PROMPT = (
     "You are a League of Legends knowledge assistant. Answer the question using "
@@ -17,23 +19,31 @@ _SYSTEM_PROMPT = (
 
 
 class SourceDocument(BaseModel):
-    """A single retrieved source cited alongside a generated answer.
+    """A single retrieved chunk cited alongside a generated answer.
+
+    The cosine distance the chunk ranked at is deliberately absent: it is a
+    property of one retriever's scoring, not of the source, and exposing it
+    would invite callers to compare numbers across retrievers that do not share
+    a scale. It travels in the retrieved Document's metadata instead, where
+    evaluation and debugging can still read it.
 
     Args:
-        champion_id: Data Dragon champion id, e.g. "Aatrox", if the source
-            document's metadata carries one.
-        name: Source document display name, if the source document's metadata
-            carries one.
-        source: Document metadata "source" value the answer was grounded in.
+        doc_key: Deterministic key of the document the chunk belongs to, e.g.
+            "ability:aatrox:Q".
+        title: Title of that document, e.g. "Aatrox Q: The Darkin Blade".
+        collection: Collection the document belongs to, one of abilities,
+            champion_stats, equipment, lore.
+        source: Human-readable provenance string for the document.
+        chunk_index: Position within the document of the chunk that matched.
+        content: Full text of the matched chunk.
     """
 
-    champion_id: str | None = Field(
-        default=None, description="Data Dragon champion id, if the source document has one."
-    )
-    name: str | None = Field(
-        default=None, description="Source document display name, if it has one."
-    )
-    source: str = Field(description="Identifier of the document the answer was grounded in.")
+    doc_key: str = Field(description="Deterministic key of the document the chunk belongs to.")
+    title: str = Field(description="Title of the document the chunk belongs to.")
+    collection: str = Field(description="Collection the document belongs to.")
+    source: str = Field(description="Human-readable provenance string for the document.")
+    chunk_index: int = Field(description="Position within the document of the chunk that matched.")
+    content: str = Field(description="Full text of the matched chunk.")
 
 
 class RagResponse(BaseModel):
@@ -50,22 +60,45 @@ class RagResponse(BaseModel):
     )
 
 
-def format_context(documents: list[Document]) -> str:
-    """Join retrieved documents into a single text block for the prompt context.
+# ---------- retrieval ----------
+
+
+def retrieve(question: str, session: Session, settings: Settings) -> list[Document]:
+    """Retrieve the chunks nearest a question from the stored corpus.
 
     Args:
-        documents: Retrieved documents, each with a "source" metadata key and
-            optionally a "name" metadata key.
+        question: User question to retrieve context for.
+        session: Open Session the ranking query runs through.
+        settings: Application settings providing embedding_model_name and
+            retriever_k.
 
     Returns:
-        Documents rendered as "{label}: {page_content}", separated by blank
-        lines, where label is the document's "name" metadata if present and
-        its "source" metadata otherwise.
+        Up to settings.retriever_k Documents, nearest first, each carrying the
+        matched chunk's text and its document's metadata.
+    """
+    retriever = PgVectorRetriever(session=session, settings=settings, k=settings.retriever_k)
+    return retriever.invoke(question)
+
+
+# ---------- generation ----------
+
+
+def format_context(documents: list[Document]) -> str:
+    """Join retrieved chunks into a single text block for the prompt context.
+
+    Args:
+        documents: Retrieved chunks, each carrying a "title" metadata key.
+
+    Returns:
+        Chunks rendered as "{title}: {page_content}", separated by blank lines.
+
+    Raises:
+        KeyError: If a document carries no "title" metadata, which means it did
+            not come from the retriever and the caller has built it by hand.
     """
     lines = []
     for doc in documents:
-        label = doc.metadata.get("name", doc.metadata["source"])
-        lines.append(f"{label}: {doc.page_content}")
+        lines.append(f"{doc.metadata['title']}: {doc.page_content}")
     return "\n\n".join(lines)
 
 
@@ -133,3 +166,38 @@ def generate(question: str, documents: list[Document], settings: Settings) -> st
     )
     response = llm.invoke(messages)
     return str(response.text)
+
+
+# ---------- orchestration ----------
+
+
+def answer_question(question: str, session: Session, settings: Settings) -> RagResponse:
+    """Answer a question against the corpus and cite every chunk it was grounded in.
+
+    Args:
+        question: User question to answer.
+        session: Open Session the retrieval query runs through.
+        settings: Application settings providing embedding_model_name,
+            retriever_k and the llm_* values.
+
+    Returns:
+        RagResponse whose sources hold one SourceDocument per retrieved chunk,
+        in the retriever's ranked order, so the caller can read the citations
+        back in the order they were weighted.
+    """
+    documents = retrieve(question, session, settings)
+    answer = generate(question, documents, settings)
+    return RagResponse(
+        answer=answer,
+        sources=[
+            SourceDocument(
+                doc_key=document.metadata["doc_key"],
+                title=document.metadata["title"],
+                collection=document.metadata["collection"],
+                source=document.metadata["source"],
+                chunk_index=document.metadata["chunk_index"],
+                content=document.page_content,
+            )
+            for document in documents
+        ],
+    )

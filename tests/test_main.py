@@ -28,9 +28,16 @@ def test_parser_rejects_refresh_flag_on_index_command():
         _build_parser().parse_args(["index", "--refresh"])
 
 
-def test_parser_rejects_removed_ask_command():
+def test_parser_parses_ask_command_with_its_question():
+    args = _build_parser().parse_args(["ask", "Who is Aatrox?"])
+
+    assert args.command == "ask"
+    assert args.question == "Who is Aatrox?"
+
+
+def test_parser_rejects_ask_without_a_question():
     with pytest.raises(SystemExit):
-        _build_parser().parse_args(["ask", "some question"])
+        _build_parser().parse_args(["ask"])
 
 
 def test_parser_rejects_missing_command():
