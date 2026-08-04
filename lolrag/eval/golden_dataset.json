@@ -1,128 +1,1877 @@
 {
-  "description": "Golden evaluation dataset for the LoL Knowledge RAG. Each entry pairs a natural-language question with the champion_ids whose corpus document should be retrieved to answer it. Authored by hand against the Data Dragon champion corpus. 'factual' questions have a supported answer in the corpus; 'refusal' questions name a champion the retriever should still find, but ask for numeric data (damage, cooldowns) the corpus does not contain, so a faithful answer must decline rather than fabricate.",
-  "version": 1,
+  "description": "Golden dataset v2, authored against the Postgres corpus of 1844 documents on Data Dragon patch 16.14.1. Every expected_doc_key is verified to resolve. scoring selects the metric: retrieval questions score hit rate and MRR, refusal questions score only whether the answer declined, limitation questions are known-unanswerable in v1 and excluded from both headline figures.",
+  "version": 2,
   "questions": [
     {
-      "id": "q01",
-      "question": "Which champion is a Darkin warrior sealed inside a living sword who seeks to bring about the end of the world?",
-      "expected_champion_ids": ["Aatrox"],
-      "category": "factual"
+      "id": "abil-mech-001",
+      "question": "What does Aatrox's Q, The Darkin Blade, do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:aatrox:Q"
+      ],
+      "expected_answer": "Three sword swings, each with a different area of effect, dealing physical damage. Enemies hit on the edge are briefly knocked up and take more.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q02",
-      "question": "Which champion is a nine-tailed fox who charms her enemies and feeds on their essence?",
-      "expected_champion_ids": ["Ahri"],
-      "category": "factual"
+      "id": "abil-mech-002",
+      "question": "How does Thresh's lantern work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:thresh:W"
+      ],
+      "expected_answer": "Dark Passage throws a lantern that shields allies and can be clicked to dash to Thresh.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q03",
-      "question": "Which manic criminal from Zaun wields a minigun and a rocket launcher and causes chaos wherever she goes?",
-      "expected_champion_ids": ["Jinx"],
-      "category": "factual"
+      "id": "abil-mech-003",
+      "question": "What happens when Lux hits an enemy with her ultimate?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:lux:R"
+      ],
+      "expected_answer": "Final Spark fires a laser dealing magic damage and detonating her Illumination passive mark.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q04",
-      "question": "Which Demacian champion spins his sword in a circle and executes weakened enemies with Demacian Justice?",
-      "expected_champion_ids": ["Garen"],
-      "category": "factual"
+      "id": "abil-mech-004",
+      "question": "What does Blitzcrank's hook do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:blitzcrank:Q"
+      ],
+      "expected_answer": "Rocket Grab pulls the first enemy hit back toward Blitzcrank and deals magic damage. The corpus does not state a stun, so a grounded answer must not claim one.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q05",
-      "question": "Which Noxian champion pulls enemies toward him with his axe and executes them with a guillotine?",
-      "expected_champion_ids": ["Darius"],
-      "category": "factual"
+      "id": "abil-mech-005",
+      "question": "How does Yasuo's Wind Wall work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:yasuo:W"
+      ],
+      "expected_answer": "It creates a moving wall that blocks all enemy projectiles for its duration.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q06",
-      "question": "Which light mage from Demacia fires a giant beam of light called Final Spark?",
-      "expected_champion_ids": ["Lux"],
-      "category": "factual"
+      "id": "abil-mech-006",
+      "question": "What does Zed's ultimate do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:zed:R"
+      ],
+      "expected_answer": "Death Mark makes Zed untargetable, marks the target, and detonates for damage based on damage dealt.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q07",
-      "question": "Which champion is a blind monk who fights with his fists and feet?",
-      "expected_champion_ids": ["LeeSin"],
-      "category": "factual"
+      "id": "abil-mech-007",
+      "question": "How does Anivia's passive work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:anivia:P"
+      ],
+      "expected_answer": "Rebirth revives her from an egg instead of dying, on a long cooldown.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q08",
-      "question": "Which frost archer fires an Enchanted Crystal Arrow that can stun a target from across the map?",
-      "expected_champion_ids": ["Ashe"],
-      "category": "factual"
+      "id": "abil-mech-008",
+      "question": "What does Malphite's ultimate do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:malphite:R"
+      ],
+      "expected_answer": "Unstoppable Force charges to a location, damaging and knocking up enemies in the area.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q09",
-      "question": "Which champion is a living boulder that charges into enemies as an Unstoppable Force?",
-      "expected_champion_ids": ["Malphite"],
-      "category": "factual"
+      "id": "abil-mech-009",
+      "question": "How does Vayne's Silver Bolts work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:vayne:W"
+      ],
+      "expected_answer": "Every third consecutive hit on the same target deals bonus true damage as a percentage of max health.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q10",
-      "question": "Which champion from Zaun can rewind time to heal himself and escape danger?",
-      "expected_champion_ids": ["Ekko"],
-      "category": "factual"
+      "id": "abil-mech-010",
+      "question": "What does Morgana's Black Shield block?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:morgana:E"
+      ],
+      "expected_answer": "It absorbs magic damage and prevents crowd control while the shield holds.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q11",
-      "question": "Which steam-powered golem grabs enemies from a distance with a rocket-powered fist?",
-      "expected_champion_ids": ["Blitzcrank"],
-      "category": "factual"
+      "id": "abil-mech-011",
+      "question": "How does Nasus's Q stack?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:nasus:Q"
+      ],
+      "expected_answer": "Siphoning Strike gains permanent bonus damage each time it kills a unit.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q12",
-      "question": "Which ancient guardian with the head of a jackal grows permanently stronger by stacking Siphoning Strike?",
-      "expected_champion_ids": ["Nasus"],
-      "category": "factual"
+      "id": "abil-mech-012",
+      "question": "What does Teemo's ultimate place?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:teemo:R"
+      ],
+      "expected_answer": "Noxious Trap places a poisonous mushroom that releases a cloud slowing and damaging enemies who step on it. Thrown onto another mushroom it bounces further.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q13",
-      "question": "Which swift scout yordle plants poisonous mushrooms and can blind his enemies?",
-      "expected_champion_ids": ["Teemo"],
-      "category": "factual"
+      "id": "abil-mech-013",
+      "question": "How does Katarina's Shunpo work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:katarina:E"
+      ],
+      "expected_answer": "She blinks to the target, striking it if it is an enemy and otherwise striking the nearest enemy. Her tooltip is blocked, so the document carries description plus values only.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q14",
-      "question": "Which exiled swordsman can block all incoming projectiles with a wall of wind?",
-      "expected_champion_ids": ["Yasuo"],
-      "category": "factual"
+      "id": "abil-mech-014",
+      "question": "What does Braum's passive do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:braum:P"
+      ],
+      "expected_answer": "Concussive Blows stuns a target after repeated hits and applies a stacking mark.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q15",
-      "question": "Which champion is the Chain Warden, who hooks enemies with a scythe and collects the souls of the dead?",
-      "expected_champion_ids": ["Thresh"],
-      "category": "factual"
+      "id": "abil-mech-015",
+      "question": "How does Orianna's Command: Attack work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:orianna:Q"
+      ],
+      "expected_answer": "The ball moves to a target location dealing magic damage along the way and remains there.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q16",
-      "question": "Which master of shadows creates living shadow clones to duel his enemies?",
-      "expected_champion_ids": ["Zed"],
-      "category": "factual"
+      "id": "abil-mech-016",
+      "question": "What does Tryndamere's ultimate do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:tryndamere:R"
+      ],
+      "expected_answer": "Undying Rage makes him unable to drop below 1 health for its duration.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q17",
-      "question": "Which assassin known as the Sinister Blade resets her abilities whenever she scores a takedown?",
-      "expected_champion_ids": ["Katarina"],
-      "category": "factual"
+      "id": "abil-mech-017",
+      "question": "How does Warwick's Blood Hunt work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:warwick:W"
+      ],
+      "expected_answer": "He senses enemies below 50 percent health, gaining move speed toward and attack speed against them; below 25 percent the bonuses triple.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q18",
-      "question": "Which fallen angel shields her allies from magic damage and binds nearby enemies with chains?",
-      "expected_champion_ids": ["Morgana"],
-      "category": "factual"
+      "id": "abil-mech-018",
+      "question": "What does Jhin's passive do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:jhin:P"
+      ],
+      "expected_answer": "Whisper limits him to four shots before reloading and makes the fourth shot a guaranteed critical strike.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q19",
-      "question": "How much damage does Jinx's ultimate ability deal at maximum rank?",
-      "expected_champion_ids": ["Jinx"],
-      "category": "refusal",
-      "notes": "The corpus describes abilities as prose only; it contains no damage numbers. A faithful answer must state the exact figure is not available, not invent one."
+      "id": "abil-mech-019",
+      "question": "How does Ekko's ultimate work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:ekko:R"
+      ],
+      "expected_answer": "Chronobreak makes him briefly untargetable then returns him to where he was seconds ago, healing him and damaging enemies.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
     },
     {
-      "id": "q20",
-      "question": "What is the exact cooldown in seconds of Garen's ultimate ability?",
-      "expected_champion_ids": ["Garen"],
-      "category": "refusal",
-      "notes": "No cooldown numbers exist in the corpus. A faithful answer must decline to give a specific number."
+      "id": "abil-mech-020",
+      "question": "What does Poppy's W stop?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:poppy:W"
+      ],
+      "expected_answer": "Steadfast Presence blocks and grounds enemy dashes in an area around her.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
+    },
+    {
+      "id": "abil-mech-021",
+      "question": "How does Sion's passive work after he dies?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:sion:P"
+      ],
+      "expected_answer": "Glory in Death briefly reanimates him with decaying health and altered attacks.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
+    },
+    {
+      "id": "abil-mech-022",
+      "question": "What does Kindred's ultimate do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:kindred:R"
+      ],
+      "expected_answer": "Lamb's Respite creates a zone in which nothing can die; at 10 percent health units can be neither damaged nor healed, and all units inside are healed when it ends.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
+    },
+    {
+      "id": "abil-mech-023",
+      "question": "How does Fiora's passive work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:fiora:P"
+      ],
+      "expected_answer": "Duelist's Dance reveals a Vital on a champion; hitting it restores health and grants move speed. Passives publish no tooltip, so true damage is not stated in the corpus and must not be claimed.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
+    },
+    {
+      "id": "abil-mech-024",
+      "question": "What does Ryze's ultimate do?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:ryze:R"
+      ],
+      "expected_answer": "Realm Warp opens a portal that teleports Ryze and nearby allies to a target location.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
+    },
+    {
+      "id": "abil-mech-025",
+      "question": "How does Illaoi's Test of Spirit work?",
+      "category": "ability-mechanics",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "ability:illaoi:E"
+      ],
+      "expected_answer": "It pulls a target's spirit out; damaging the spirit damages the champion, and killing it spawns tentacles.",
+      "collection": "abilities",
+      "failure_mode": "prose description retrieval; several targets have blocked tooltips"
+    },
+    {
+      "id": "abil-num-001",
+      "question": "How much damage does Aatrox's Q deal at max rank?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:aatrox:Q"
+      ],
+      "expected_answer": "70 physical damage at rank 5, plus 0.9 of total AD (QBaseDamage 10/25/40/55/70, QTotalADRatio 0.6/0.675/0.75/0.825/0.9).",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-002",
+      "question": "What is the cooldown of Darius's ultimate?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:darius:R"
+      ],
+      "expected_answer": "120/100/80 seconds.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-003",
+      "question": "Does Jinx's Q scale with attack damage or ability power?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:jinx:Q"
+      ],
+      "expected_answer": "Attack damage. RocketTAD is 1.1 of total AD; no AP ratio is stored for this ability.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-004",
+      "question": "How much damage does Garen's ultimate deal?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:garen:R"
+      ],
+      "expected_answer": "BaseDamage 125/200/275, plus ExecuteDamage 0.25/0.3/0.35 scaling on the target's missing health. The execute fraction is stored unflagged, so the corpus does not itself mark it as a percentage.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-005",
+      "question": "What is the mana cost of Lux's ultimate?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:lux:R"
+      ],
+      "expected_answer": "100 mana at every rank.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-006",
+      "question": "How long does Morgana's Dark Binding root for?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:morgana:Q"
+      ],
+      "expected_answer": "2/2.25/2.5/2.75/3 seconds.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-007",
+      "question": "How much health does Vladimir's Transfusion restore?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:vladimir:Q"
+      ],
+      "expected_answer": "HealAPRatio 0.35 of total AP. The base heal is stored under an undecoded hashed name, so only the ratio is cleanly retrievable - a correct answer should say so rather than invent a base value.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-008",
+      "question": "What is the cooldown on Ezreal's Arcane Shift?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:ezreal:E"
+      ],
+      "expected_answer": "26/23/20/17/14 seconds.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-009",
+      "question": "How much armor does Rammus gain from Defensive Ball Curl?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:rammus:W"
+      ],
+      "expected_answer": "FlatBonusArmor 27/32/37/42/47, plus BonusArmorPercent 0.3/0.375/0.45/0.525/0.6 of total armor.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-010",
+      "question": "What attack speed does Master Yi's Highlander give?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:masteryi:R"
+      ],
+      "expected_answer": "RASBonus 25/45/65.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-011",
+      "question": "How much damage does Veigar's Primordial Burst deal?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:veigar:R"
+      ],
+      "expected_answer": "175/250/325 magic damage, plus 0.65/0.7/0.75 of total AP.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-012",
+      "question": "How much does Nasus's Wither slow?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:nasus:W"
+      ],
+      "expected_answer": "SlowBase 35 at every rank, with MaxSlowTooltipOnly 47/59/71/83/95. Stored as whole numbers and NOT flagged as percentages, so the corpus does not state the unit.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-013",
+      "question": "How much bonus health does Lulu's Wild Growth give?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:lulu:R"
+      ],
+      "expected_answer": "BonusHealth 275/425/575. It grants bonus health, not a shield.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-014",
+      "question": "How much damage does Caitlyn's Ace in the Hole deal?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:caitlyn:R"
+      ],
+      "expected_answer": "RBaseDamage 300/475/650 physical, plus 1.0 of bonus AD. Cast range is not stored on abilities at all.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-015",
+      "question": "How long does Sona's Crescendo stun for?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:sona:R"
+      ],
+      "expected_answer": "StunDuration 1.5 seconds at every rank.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-016",
+      "question": "What is the cooldown of Shen's Stand United?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:shen:R"
+      ],
+      "expected_answer": "200/180/160 seconds.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-017",
+      "question": "How much does Darius's passive bleed for?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:darius:P"
+      ],
+      "expected_answer": "BleedDamagePerStack 13 at level 1 rising to 30 at level 18, stacking up to 5 times.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-018",
+      "question": "What is the AP ratio on Annie's Disintegrate?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:annie:Q"
+      ],
+      "expected_answer": "APRatio 0.8 of total AP at every rank.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-019",
+      "question": "How long does Amumu's ultimate stun?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:amumu:R"
+      ],
+      "expected_answer": "RDuration 1.5 seconds at every rank.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-020",
+      "question": "How much movement speed does Janna's passive give?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:janna:P"
+      ],
+      "expected_answer": "MSPercentAlly 0.06. Stored as a bare fraction with no percent flag, so the corpus does not state whether this is 6 percent - a grounded answer should not silently convert it.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-021",
+      "question": "How much damage does Ziggs's Mega Inferno Bomb deal?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:ziggs:R"
+      ],
+      "expected_answer": "300/500/700 magic damage, plus 1.0 of total AP.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-022",
+      "question": "How much does Soraka's Wish heal?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:soraka:R"
+      ],
+      "expected_answer": "BaseHeal 150/250/350.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-023",
+      "question": "What is the cooldown of Riven's Blade of the Exile?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:riven:R"
+      ],
+      "expected_answer": "120/90/60 seconds.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-024",
+      "question": "How much damage does Pantheon's Comet Spear do when fully charged?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:pantheon:Q"
+      ],
+      "expected_answer": "HoldDamage 70/100/130/160/190 physical, with ExecuteBaseDamage 155/230/305/380/455.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "abil-num-025",
+      "question": "What does Vladimir pay to cast Sanguine Pool?",
+      "category": "ability-numbers",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "ability:vladimir:W"
+      ],
+      "expected_answer": "HealthCost 0.15 at every rank, paid in health rather than mana. Stored unflagged, so the corpus does not state that this is 15 percent.",
+      "collection": "abilities",
+      "failure_mode": "values block in tail chunks; percentage and per-rank rendering"
+    },
+    {
+      "id": "item-look-001",
+      "question": "What does Bramble Vest do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3076"
+      ],
+      "expected_answer": "Grants armor, reflects magic damage on being hit, and applies Grievous Wounds. Costs 800 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-002",
+      "question": "How much does a Needlessly Large Rod cost?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:1058"
+      ],
+      "expected_answer": "1200 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-003",
+      "question": "What does Liandry's Torment do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:6653"
+      ],
+      "expected_answer": "Grants health and ability power, and burns targets over time. Costs 3000 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-004",
+      "question": "How much does Doran's Blade cost?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:1055"
+      ],
+      "expected_answer": "450 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-005",
+      "question": "What does Mejai's Soulstealer do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3041"
+      ],
+      "expected_answer": "Stacks ability power on takedowns and loses stacks on death. Costs 1500 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-006",
+      "question": "What does Executioner's Calling apply?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3123"
+      ],
+      "expected_answer": "Grievous Wounds, reducing healing on the target. Costs 800 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-007",
+      "question": "How much does a B. F. Sword cost?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:1038"
+      ],
+      "expected_answer": "1300 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-008",
+      "question": "What does Quicksilver Sash remove?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3140"
+      ],
+      "expected_answer": "On activation it removes all crowd control debuffs except Airborne. Costs 1300 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-009",
+      "question": "What does Umbral Glaive do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3179"
+      ],
+      "expected_answer": "Grants attack damage, lethality and ability haste. Reveals nearby enemy wards and traps and lets your attacks damage them; it does not disable them. Costs 2800 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-010",
+      "question": "How much does a Control Ward cost?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:2055"
+      ],
+      "expected_answer": "75 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-011",
+      "question": "What does Sheen do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3057"
+      ],
+      "expected_answer": "Spellblade: after using an ability the next attack deals bonus physical damage on-hit. Costs 900 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-012",
+      "question": "What does Last Whisper give?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3035"
+      ],
+      "expected_answer": "Attack damage and armor penetration. Costs 1450 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-013",
+      "question": "What does Hexdrinker do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3155"
+      ],
+      "expected_answer": "Grants attack damage and magic resist, and shields against magic damage at low health. Costs 1300 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-014",
+      "question": "How much does Zeal cost?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:3086"
+      ],
+      "expected_answer": "1200 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-015",
+      "question": "What does Tiamat do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3077"
+      ],
+      "expected_answer": "Grants attack damage and deals splash damage to nearby enemies. Costs 1200 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-016",
+      "question": "What does Dark Seal do?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:1082"
+      ],
+      "expected_answer": "A cheap stacking ability power item that loses stacks on death. Costs 350 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-017",
+      "question": "What is Lost Chapter built from?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3802"
+      ],
+      "expected_answer": "Amplifying Tome, Sapphire Crystal and Glowing Mote. Lost Chapter costs 1200 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-look-018",
+      "question": "What does Warden's Mail give?",
+      "category": "item-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "item:3082"
+      ],
+      "expected_answer": "40 armor, plus Rock Solid which reduces incoming damage from attacks. Costs 1000 gold.",
+      "collection": "equipment",
+      "failure_mode": "equipment type confusion; all targets have unique names so the answer is unambiguous"
+    },
+    {
+      "id": "item-mode-001",
+      "question": "How much does Thornmail cost on Summoner's Rift?",
+      "category": "item-mode-variants",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:3075"
+      ],
+      "expected_answer": "2450 gold. The Arena version is a different item at 2500.",
+      "collection": "equipment",
+      "failure_mode": "duplicate-name crowding; only disjoint-map names used, the 26 overlapping ones are excluded"
+    },
+    {
+      "id": "item-mode-002",
+      "question": "How much does Infinity Edge cost in Arena?",
+      "category": "item-mode-variants",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:223031"
+      ],
+      "expected_answer": "2500 gold. The Summoner's Rift version costs 3500.",
+      "collection": "equipment",
+      "failure_mode": "duplicate-name crowding; only disjoint-map names used, the 26 overlapping ones are excluded"
+    },
+    {
+      "id": "item-mode-003",
+      "question": "How much does Black Cleaver cost in Arena?",
+      "category": "item-mode-variants",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:223071"
+      ],
+      "expected_answer": "2500 gold. The Summoner's Rift version costs 3000.",
+      "collection": "equipment",
+      "failure_mode": "duplicate-name crowding; only disjoint-map names used, the 26 overlapping ones are excluded"
+    },
+    {
+      "id": "item-mode-004",
+      "question": "How much does Bloodthirster cost on Summoner's Rift?",
+      "category": "item-mode-variants",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:3072"
+      ],
+      "expected_answer": "3400 gold. The Arena version costs 2500.",
+      "collection": "equipment",
+      "failure_mode": "duplicate-name crowding; only disjoint-map names used, the 26 overlapping ones are excluded"
+    },
+    {
+      "id": "item-mode-005",
+      "question": "How much does Banshee's Veil cost in Arena?",
+      "category": "item-mode-variants",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:223102"
+      ],
+      "expected_answer": "2500 gold. The Summoner's Rift version costs 3000.",
+      "collection": "equipment",
+      "failure_mode": "duplicate-name crowding; only disjoint-map names used, the 26 overlapping ones are excluded"
+    },
+    {
+      "id": "item-mode-006",
+      "question": "How much do Berserker's Greaves cost on Summoner's Rift?",
+      "category": "item-mode-variants",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:3006"
+      ],
+      "expected_answer": "1100 gold. The Arena version costs 500.",
+      "collection": "equipment",
+      "failure_mode": "duplicate-name crowding; only disjoint-map names used, the 26 overlapping ones are excluded"
+    },
+    {
+      "id": "item-mode-007",
+      "question": "How much does Blade of The Ruined King cost in Arena?",
+      "category": "item-mode-variants",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "item:223153"
+      ],
+      "expected_answer": "2500 gold. The Summoner's Rift version costs 3200.",
+      "collection": "equipment",
+      "failure_mode": "duplicate-name crowding; only disjoint-map names used, the 26 overlapping ones are excluded"
+    },
+    {
+      "id": "rune-sum-001",
+      "question": "What does Conqueror do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "rune:8010"
+      ],
+      "expected_answer": "Stacks adaptive force on hitting champions and heals at full stacks.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-002",
+      "question": "What does Electrocute do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "rune:8112"
+      ],
+      "expected_answer": "Hitting a champion with three separate attacks or abilities deals bonus adaptive damage.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-003",
+      "question": "What does Grasp of the Undying do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "rune:8437"
+      ],
+      "expected_answer": "Periodically empowers an attack to deal damage, heal, and grant permanent health.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-004",
+      "question": "What does Dark Harvest do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "rune:8128"
+      ],
+      "expected_answer": "Damaging a low-health champion deals bonus damage and permanently stacks.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-005",
+      "question": "What does Demolish do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "rune:8446"
+      ],
+      "expected_answer": "Your third attack against a tower deals bonus physical damage scaling with max health.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-006",
+      "question": "What does Manaflow Band give?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "rune:8226"
+      ],
+      "expected_answer": "Permanent bonus mana on hitting champions with abilities, and mana regeneration once fully stacked.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-007",
+      "question": "What does Cosmic Insight do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "rune:8347"
+      ],
+      "expected_answer": "Summoner spell and item haste.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-008",
+      "question": "What is the cooldown of Exhaust?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "summoner_spell:SummonerExhaust"
+      ],
+      "expected_answer": "240 seconds. Note the slow duration is NOT stored: SummonerSpell holds only cooldown and summoner level.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-009",
+      "question": "What does Ignite do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "summoner_spell:SummonerDot"
+      ],
+      "expected_answer": "Deals true damage over time to the target and reduces healing effects on them for the duration.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "rune-sum-010",
+      "question": "What does Barrier do?",
+      "category": "rune-and-summoner",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "summoner_spell:SummonerBarrier"
+      ],
+      "expected_answer": "Shields the caster for a short duration.",
+      "collection": "equipment",
+      "failure_mode": "smallest entity types, 62 runes and 16 summoner spells; Flash excluded as a duplicate name"
+    },
+    {
+      "id": "lore-champ-001",
+      "question": "Who is Viego and how did he become the Ruined King?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:viego"
+      ],
+      "expected_answer": "A king whose grief over his wife's death caused the Ruination and turned him undead.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-002",
+      "question": "Which nation does Jinx come from?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:jinx"
+      ],
+      "expected_answer": "Zaun.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-003",
+      "question": "What is Darius's relationship to Draven?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:darius"
+      ],
+      "expected_answer": "They are brothers; Darius is the elder and raised him.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-004",
+      "question": "Who is Aatrox?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:aatrox"
+      ],
+      "expected_answer": "A Darkin, once an Ascended warrior, now bound within a living sword and seeking annihilation.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-005",
+      "question": "What happened between Yasuo and his brother?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:yasuo"
+      ],
+      "expected_answer": "Yasuo was accused of his master's murder and killed his brother Yone in the ensuing confrontation.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-006",
+      "question": "Who is Lux and what does she hide?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:lux"
+      ],
+      "expected_answer": "A Demacian noble hiding her innate magic in a nation that outlaws it.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-007",
+      "question": "What is Thresh?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:thresh"
+      ],
+      "expected_answer": "A sadistic spectral warden of the Shadow Isles who collects souls in his lantern.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-008",
+      "question": "Where does Braum come from?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:braum"
+      ],
+      "expected_answer": "The Freljord.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-009",
+      "question": "Who is Zed and why did he break from the Kinkou?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:zed"
+      ],
+      "expected_answer": "An Ionian who embraced forbidden shadow magic and founded the Order of Shadow.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-010",
+      "question": "What is Nasus's connection to Renekton?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:nasus"
+      ],
+      "expected_answer": "They are Ascended brothers; Renekton was sealed away and emerged maddened.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-011",
+      "question": "Who is Vi and how did she end up working for Piltover?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:vi"
+      ],
+      "expected_answer": "A Zaunite enforcer-turned-lawkeeper recruited by Caitlyn and the Piltover wardens.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-champ-012",
+      "question": "What is Cassiopeia and how was she transformed?",
+      "category": "lore-champion",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "champion:cassiopeia"
+      ],
+      "expected_answer": "A Noxian noble transformed into a serpentine creature in a Shuriman tomb.",
+      "collection": "lore",
+      "failure_mode": "champion bios against a 76 percent lore-dominated index"
+    },
+    {
+      "id": "lore-story-001",
+      "question": "What happens in the story A Sword Without a Sheath?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:a-sword-without-a-sheath-story"
+      ],
+      "expected_answer": "Must summarise that story specifically, not the champion biography.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-story-002",
+      "question": "What is An Explorer's Journey about?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:an-explorers-journey"
+      ],
+      "expected_answer": "Must summarise that story specifically.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-story-003",
+      "question": "What happens in Burning Tides?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:bilgewater-story"
+      ],
+      "expected_answer": "The Bilgewater event story involving Gangplank, Miss Fortune and Graves.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-story-004",
+      "question": "What is the short story The Cage about?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:aatrox-color-story"
+      ],
+      "expected_answer": "Aatrox's colour story. Must not answer from the champion biography.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-story-005",
+      "question": "What happens in The Garden of Forgetting?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:ahri-garden-forgetting"
+      ],
+      "expected_answer": "Must summarise that story specifically.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-story-006",
+      "question": "What is Tomb of the Troll Boy about?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:braum-color-story"
+      ],
+      "expected_answer": "Braum's colour story.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-story-007",
+      "question": "What happens in The Weakest Heart?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:camille-weakest-heart"
+      ],
+      "expected_answer": "Must summarise that story specifically.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-story-008",
+      "question": "What is Confessions of a Broken Blade: Part I about?",
+      "category": "lore-story",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "story:confessions-of-a-broken-blade-act-1-story"
+      ],
+      "expected_answer": "Must summarise part one specifically, not parts two or three.",
+      "collection": "lore",
+      "failure_mode": "long-form stories losing to champion bios; failures here are the finding, not a defect"
+    },
+    {
+      "id": "lore-fact-001",
+      "question": "What is Noxus and what does it believe?",
+      "category": "lore-faction",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "faction:noxus"
+      ],
+      "expected_answer": "An expansionist empire that prizes strength and merit over birth.",
+      "collection": "lore",
+      "failure_mode": "14 documents, the weakest-represented entity type"
+    },
+    {
+      "id": "lore-fact-002",
+      "question": "What are the Shadow Isles?",
+      "category": "lore-faction",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "faction:shadow-isles"
+      ],
+      "expected_answer": "An island chain consumed by the Black Mist where the dead do not rest.",
+      "collection": "lore",
+      "failure_mode": "14 documents, the weakest-represented entity type"
+    },
+    {
+      "id": "lore-fact-003",
+      "question": "Where is Bandle City?",
+      "category": "lore-faction",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "faction:bandle-city"
+      ],
+      "expected_answer": "The yordle homeland, a spirit realm only loosely connected to the material world.",
+      "collection": "lore",
+      "failure_mode": "14 documents, the weakest-represented entity type"
+    },
+    {
+      "id": "lore-fact-004",
+      "question": "What is Ionia?",
+      "category": "lore-faction",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "faction:ionia"
+      ],
+      "expected_answer": "A land of natural magic and balance, invaded by Noxus.",
+      "collection": "lore",
+      "failure_mode": "14 documents, the weakest-represented entity type"
+    },
+    {
+      "id": "lore-fact-005",
+      "question": "What is the relationship between Piltover and Zaun?",
+      "category": "lore-faction",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "faction:piltover",
+        "faction:zaun"
+      ],
+      "expected_answer": "Two halves of one city, Piltover above and Zaun below, economically bound and deeply unequal.",
+      "collection": "lore",
+      "failure_mode": "14 documents, the weakest-represented entity type"
+    },
+    {
+      "id": "ref-runtime-001",
+      "question": "How long does it take for Teemo's mushrooms to recharge?",
+      "category": "refusal-runtime-values",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline on the recharge time: the source publishes @AmmoRechargeTime@ and never its value. Note MaxAmmo (3/4/5) IS stored, so stating how many mushrooms he holds is correct and not a hallucination; only a recharge duration is.",
+      "collection": null,
+      "failure_mode": "the tokens the source never publishes a value for"
+    },
+    {
+      "id": "ref-runtime-002",
+      "question": "How much mana does Cassiopeia's E cost?",
+      "category": "refusal-runtime-values",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Cassiopeia's E cost is the corpus's only @Cost@ token, computed by the client.",
+      "collection": null,
+      "failure_mode": "the tokens the source never publishes a value for"
+    },
+    {
+      "id": "ref-runtime-003",
+      "question": "How long until Zyra's plant charges refresh?",
+      "category": "refusal-runtime-values",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Zyra W carries @AmmoRechargeTime@ with no published value.",
+      "collection": null,
+      "failure_mode": "the tokens the source never publishes a value for"
+    },
+    {
+      "id": "ref-runtime-004",
+      "question": "How long does it take Vi to regain a charge of Relentless Force?",
+      "category": "refusal-runtime-values",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Vi E carries @AmmoRechargeTime@ with no published value.",
+      "collection": null,
+      "failure_mode": "the tokens the source never publishes a value for"
+    },
+    {
+      "id": "ref-patch-001",
+      "question": "What changed about Aatrox in patch 14.3?",
+      "category": "refusal-patch-history",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. The corpus holds one patch and no changelog.",
+      "collection": null,
+      "failure_mode": "the corpus is a single pinned patch, 16.14.1"
+    },
+    {
+      "id": "ref-patch-002",
+      "question": "Was Yuumi nerfed recently?",
+      "category": "refusal-patch-history",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No patch history exists in the corpus.",
+      "collection": null,
+      "failure_mode": "the corpus is a single pinned patch, 16.14.1"
+    },
+    {
+      "id": "ref-patch-003",
+      "question": "When was Thornmail's armor value last adjusted?",
+      "category": "refusal-patch-history",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No historical values are stored.",
+      "collection": null,
+      "failure_mode": "the corpus is a single pinned patch, 16.14.1"
+    },
+    {
+      "id": "ref-patch-004",
+      "question": "What did the most recent patch change on Summoner's Rift?",
+      "category": "refusal-patch-history",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No changelog is ingested.",
+      "collection": null,
+      "failure_mode": "the corpus is a single pinned patch, 16.14.1"
+    },
+    {
+      "id": "ref-meta-001",
+      "question": "What is the best build path for Aatrox into a tank matchup?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No Riot JSON source carries build recommendations.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-meta-002",
+      "question": "Which champion has the highest win rate right now?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No win rate data exists in the corpus.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-meta-003",
+      "question": "What runes should I take on Lux support?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Rune descriptions exist; rune recommendations do not.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-meta-004",
+      "question": "Is Zed good in the current meta?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. The corpus has no notion of meta or balance state.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-meta-005",
+      "question": "What is the best jungle path for Warwick?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No pathing or strategy data is ingested.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-meta-006",
+      "question": "Which lane should I play Teemo in?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Role tags exist but lane assignment advice does not.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-meta-007",
+      "question": "What is the optimal skill order for Darius?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Abilities and their values exist; skill order does not.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-meta-008",
+      "question": "Which champions counter Yasuo?",
+      "category": "refusal-meta",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No matchup or counter data exists in the corpus.",
+      "collection": null,
+      "failure_mode": "strongest pretraining-versus-corpus conflict; the highest-value refusal block"
+    },
+    {
+      "id": "ref-world-001",
+      "question": "Who won the 2024 World Championship?",
+      "category": "refusal-real-world",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No esports data is ingested.",
+      "collection": null,
+      "failure_mode": "cleanly outside every permitted source"
+    },
+    {
+      "id": "ref-world-002",
+      "question": "Which professional player is best known for playing Zed?",
+      "category": "refusal-real-world",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No player data exists.",
+      "collection": null,
+      "failure_mode": "cleanly outside every permitted source"
+    },
+    {
+      "id": "ref-world-003",
+      "question": "How many people play League of Legends?",
+      "category": "refusal-real-world",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No player-count data exists.",
+      "collection": null,
+      "failure_mode": "cleanly outside every permitted source"
+    },
+    {
+      "id": "ref-world-004",
+      "question": "Who voices Jinx in Arcane?",
+      "category": "refusal-real-world",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No production or cast data is ingested.",
+      "collection": null,
+      "failure_mode": "cleanly outside every permitted source"
+    },
+    {
+      "id": "ref-fake-001",
+      "question": "What does Aatrox's second passive do?",
+      "category": "refusal-nonexistent",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Aatrox has exactly one passive, Deathbringer Stance.",
+      "collection": null,
+      "failure_mode": "invention under a plausible premise"
+    },
+    {
+      "id": "ref-fake-002",
+      "question": "What does the item Sunfire Bulwark build into?",
+      "category": "refusal-nonexistent",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No item by that name exists in the corpus.",
+      "collection": null,
+      "failure_mode": "invention under a plausible premise"
+    },
+    {
+      "id": "ref-fake-003",
+      "question": "What is the champion Aurelion Vex's ultimate?",
+      "category": "refusal-nonexistent",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No such champion exists.",
+      "collection": null,
+      "failure_mode": "invention under a plausible premise"
+    },
+    {
+      "id": "ref-fake-004",
+      "question": "What does the rune Bloodthirsty Onslaught do?",
+      "category": "refusal-nonexistent",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. No such rune exists.",
+      "collection": null,
+      "failure_mode": "invention under a plausible premise"
+    },
+    {
+      "id": "ref-fake-005",
+      "question": "How much does Doran's Greatsword cost?",
+      "category": "refusal-nonexistent",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. The Doran's items are Blade, Ring, Shield, Helm and Bow. There is no Greatsword.",
+      "collection": null,
+      "failure_mode": "invention under a plausible premise"
+    },
+    {
+      "id": "ref-range-001",
+      "question": "What does Aatrox's Q do at rank 6?",
+      "category": "refusal-out-of-range",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline or correct the premise. Q has 5 ranks.",
+      "collection": null,
+      "failure_mode": "over-extension from otherwise correct retrieval"
+    },
+    {
+      "id": "ref-range-002",
+      "question": "How much damage does Lux's ultimate deal at rank 4?",
+      "category": "refusal-out-of-range",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline or correct the premise. Ultimates have 3 ranks.",
+      "collection": null,
+      "failure_mode": "over-extension from otherwise correct retrieval"
+    },
+    {
+      "id": "ref-range-003",
+      "question": "What is Garen's passive at rank 2?",
+      "category": "refusal-out-of-range",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline or correct the premise. Passives have no ranks; max_rank is null for them.",
+      "collection": null,
+      "failure_mode": "over-extension from otherwise correct retrieval"
+    },
+    {
+      "id": "ref-mode-001",
+      "question": "How much does Thornmail cost in Teamfight Tactics?",
+      "category": "refusal-mode-availability",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should decline. Thornmail is on maps 11, 12, 21 and 35 only, not 22.",
+      "collection": null,
+      "failure_mode": "negative claims grounded in stored map data"
+    },
+    {
+      "id": "ref-mode-002",
+      "question": "Can I buy Bramble Vest in Arena?",
+      "category": "refusal-mode-availability",
+      "scoring": "refusal",
+      "check": "refusal",
+      "expected_doc_keys": [],
+      "expected_answer": "Should say no. Bramble Vest is not enabled on map 30.",
+      "collection": null,
+      "failure_mode": "negative claims grounded in stored map data"
+    },
+    {
+      "id": "limit-list-001",
+      "question": "Which champions are from Noxus?",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Answerable from champions.faction_slug. Out of scope for v1 dense retrieval.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-002",
+      "question": "List every item that grants ability haste.",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Answerable from item_tag. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-003",
+      "question": "Which champions have a passive that heals them?",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Requires scanning all 173 passives. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-004",
+      "question": "How many champions belong to Ionia?",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "A count over champions.faction_slug. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-005",
+      "question": "Which items build out of a B. F. Sword?",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Answerable from item_components. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-006",
+      "question": "Which runes are in the Domination tree?",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Answerable from runes.path_id. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-007",
+      "question": "Name every champion whose ultimate is a global ability.",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Requires scanning all 173 ultimates. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-008",
+      "question": "Which items give both armor and health?",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Answerable from item_tag or item_values. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-009",
+      "question": "Which champions appear in the story Burning Tides?",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Answerable from story_champion. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-list-010",
+      "question": "List all the factions in Runeterra.",
+      "category": "list-aggregation",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Answerable from the factions table. Out of scope for v1.",
+      "collection": null,
+      "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     }
   ]
 }

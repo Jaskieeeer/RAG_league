@@ -28,8 +28,16 @@ class Settings(BaseSettings):
         langsmith_tracing: Whether to enable LangSmith tracing at runtime.
         langsmith_api_key: LangSmith API key, kept out of logs and reprs.
         langsmith_project: LangSmith project name traces are grouped under.
-        eval_judge_model_name: Gemini chat model identifier used by the faithfulness judge.
+        eval_model_name: Gemini chat model identifier the evaluation harness
+            generates answers with, for both the pipeline and the no-retrieval
+            baseline. Held apart from llm_model_name so an eval run can be
+            priced and rate-limited independently of what the product answers
+            with, and shared by both systems so the comparison stays honest.
+        eval_judge_model_name: Gemini chat model identifier used by the evaluation judges.
         eval_report_dir: Filesystem path where evaluation reports are written.
+        eval_agreement_sample_size: Number of entailment judgements dumped for
+            hand-scoring, which is what the judge-human agreement figure is
+            measured over.
         database_url: SQLAlchemy connection URL for the Postgres/pgvector database.
     """
 
@@ -60,8 +68,10 @@ class Settings(BaseSettings):
     langsmith_tracing: bool = False
     langsmith_api_key: SecretStr | None = None
     langsmith_project: str = "lolrag-eval"
-    eval_judge_model_name: str = "gemini-3.5-flash"
+    eval_model_name: str = "gemini-3.1-flash-lite"
+    eval_judge_model_name: str = "gemini-3.1-flash-lite"
     eval_report_dir: str = "./eval_reports"
+    eval_agreement_sample_size: int = 20
 
     database_url: str = "postgresql+psycopg://lolrag:lolrag@localhost:5432/lolrag"
 
