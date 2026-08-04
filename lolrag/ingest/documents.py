@@ -11,12 +11,23 @@ rather than arbitrary: Community Dragon calls map 12 "Random Map", which is
 wrong, so it must never be used alone. The names are frozen here as a module
 constant because they are seven strings that change on the timescale of years,
 and fetching them would add two endpoints to every ingest for no new fact.
+
+MODE_NAMES is deliberately almost empty. Data Dragon publishes each summoner
+spell's game modes as raw engine enums and publishes no table naming them, so
+an enum is renamed here only when a first-party string already proves the name:
+NEXUSBLITZ is the same token sequence as the Data Dragon map name for map 21,
+which MAP_NAMES already carries. Every other enum, CHERRY and ULTBOOK among
+them, renders raw. Naming those would mean importing knowledge no permitted
+source published, and a wrong mode name in a frozen corpus is worse than an
+ugly one.
 """
 
 import logging
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from itertools import combinations
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sqlalchemy import delete, exists, func, insert, select
@@ -28,6 +39,7 @@ from lolrag.db.models import (
     Ability,
     AbilityValue,
     Champion,
+    ChampionStats,
     Chunk,
     Document,
     Faction,
@@ -46,6 +58,7 @@ from lolrag.ingest.markup import clean_markup
 logger = logging.getLogger(__name__)
 
 COLLECTION_ABILITIES = "abilities"
+COLLECTION_CHAMPION_STATS = "champion_stats"
 COLLECTION_EQUIPMENT = "equipment"
 COLLECTION_LORE = "lore"
 
@@ -58,6 +71,29 @@ MAP_NAMES = {
     33: "Swarm",
     35: "The Bandlewood",
 }
+
+MODE_NAMES = {"NEXUSBLITZ": "Nexus Blitz"}
+
+CHAMPION_STAT_LINES = (
+    ("Health", "hp", "hp_per_level"),
+    ("Health regeneration", "hp_regen", "hp_regen_per_level"),
+    ("Primary resource", "mp", "mp_per_level"),
+    ("Primary resource regeneration", "mp_regen", "mp_regen_per_level"),
+    ("Attack damage", "attack_damage", "attack_damage_per_level"),
+    ("Attack speed", "attack_speed", "attack_speed_per_level"),
+    ("Attack range", "attack_range", None),
+    ("Armor", "armor", "armor_per_level"),
+    ("Magic resistance", "spell_block", "spell_block_per_level"),
+    ("Movement speed", "move_speed", None),
+    ("Critical strike chance", "crit", "crit_per_level"),
+)
+
+STATS_PREAMBLE = (
+    "Base values are at level 1; each growth figure is the per-level number"
+    " Data Dragon publishes, not a total."
+)
+MODES_LABEL = "Modes:"
+SUMMONER_SPELL_KIND = "summoner spell"
 
 ENTITY_COLUMNS = (
     "champion_slug",
@@ -254,7 +290,8 @@ class BuiltDocument:
 
     Args:
         doc_key: Deterministic key derived from the entity's identity.
-        collection: Logical collection, one of abilities, equipment, lore.
+        collection: Logical collection, one of abilities, champion_stats,
+            equipment, lore.
         entity_column: Name of the documents column holding this document's
             entity foreign key; the other six stay NULL.
         entity_id: Value of that foreign key.
@@ -404,23 +441,52 @@ def build_rune_document(rune: Rune) -> BuiltDocument:
     )
 
 
-def build_summoner_spell_document(spell: SummonerSpell) -> BuiltDocument:
+def mode_name(mode: str) -> str:
+    """Render one raw game-mode enum as the name a first-party source proves.
+
+    Args:
+        mode: Raw enum string as Data Dragon publishes it, e.g. CLASSIC.
+
+    Returns:
+        The readable name when MODE_NAMES carries one, and the raw enum
+        otherwise. An unnamed enum is never guessed at from its spelling: the
+        corpus would then assert a mode name no source published.
+    """
+    return MODE_NAMES.get(mode, mode)
+
+
+def build_summoner_spell_document(spell: SummonerSpell, *, name_is_shared: bool) -> BuiltDocument:
     """Build the document for one summoner spell.
 
     Args:
         spell: Stored SummonerSpell.
+        name_is_shared: Whether another summoner spell carries the same name, in
+            which case the title needs more than the name to identify the spell.
 
     Returns:
-        A BuiltDocument in the equipment collection. The cooldown and unlock
+        A BuiltDocument in the equipment collection. The header always carries
+        the spell's modes; the title carries one only when the name is shared
+        and the spell exists in exactly one mode, which is what separates the
+        two Flashes and the two Marks without expanding Ignite's title into a
+        dozen modes it shares with everything else. The cooldown and unlock
         level lines are omitted when the source publishes neither.
     """
-    title = f"{spell.name} (summoner spell)"
+    modes = [mode_name(mode) for mode in spell.modes]
+    if name_is_shared and len(modes) == 1:
+        title = f"{spell.name} ({modes[0]} {SUMMONER_SPELL_KIND})"
+    else:
+        title = f"{spell.name} ({SUMMONER_SPELL_KIND})"
+    header = [title]
+    if modes:
+        header.append(f"{MODES_LABEL} {LIST_SEPARATOR.join(modes)}")
     facts: list[str] = []
     if spell.cooldown is not None:
         facts.append(f"Cooldown: {_format_number(spell.cooldown)} seconds")
     if spell.summoner_level is not None:
         facts.append(f"Unlocked at summoner level {spell.summoner_level}")
-    content = _join_blocks([title, spell.description_text, LINE_SEPARATOR.join(facts)])
+    content = _join_blocks(
+        [LINE_SEPARATOR.join(header), spell.description_text, LINE_SEPARATOR.join(facts)]
+    )
     return BuiltDocument(
         doc_key=f"summoner_spell:{spell.id}",
         collection=COLLECTION_EQUIPMENT,
@@ -459,6 +525,46 @@ def build_champion_document(champion: Champion) -> BuiltDocument:
         entity_id=champion.slug,
         title=title,
         source=f"Riot Universe champion {champion.slug}",
+        content=content,
+    )
+
+
+def build_champion_stats_document(stats: ChampionStats) -> BuiltDocument:
+    """Build the base statistics document for one playable champion.
+
+    Args:
+        stats: Stored ChampionStats with its champion loaded.
+
+    Returns:
+        A BuiltDocument in the champion_stats collection, headed by the
+        champion's name and title so a chunk of bare numbers is still
+        attributable, then one line per stat. A stat with a per-level figure
+        states the base as the level-1 value and the growth as the number the
+        source publishes, never as a level-18 total: Riot's growth curve is not
+        a plain multiple of the published figure, so a rendered total would be a
+        number no source published. This is a separate document from the
+        champion's biography on purpose; a numeric block inside that prose would
+        degrade lore retrieval.
+    """
+    champion = stats.champion
+    title = f"{champion.name} base statistics"
+    header = [title, f"Champion: {champion.name}, {champion.title}", STATS_PREAMBLE]
+    lines: list[str] = []
+    for label, base_column, growth_column in CHAMPION_STAT_LINES:
+        base = _format_number(getattr(stats, base_column))
+        if growth_column is None:
+            lines.append(f"{label}: {base}")
+            continue
+        growth = _format_number(getattr(stats, growth_column))
+        lines.append(f"{label}: {base} at level 1, growth {growth} per level")
+    content = _join_blocks([LINE_SEPARATOR.join(header), LINE_SEPARATOR.join(lines)])
+    return BuiltDocument(
+        doc_key=f"stats:{stats.champion_slug}",
+        collection=COLLECTION_CHAMPION_STATS,
+        entity_column="champion_slug",
+        entity_id=stats.champion_slug,
+        title=title,
+        source=f"Data Dragon champion stats {champion.ddragon_key}",
         content=content,
     )
 
@@ -537,6 +643,55 @@ def _grouped(session: Session, table: object, value_column: object) -> dict[str,
     return grouped
 
 
+def contradicting_copies(items: Sequence[Item], maps_by_item: dict[str, list]) -> set[str]:
+    """Find the items that would put two different prices on one name in one mode.
+
+    Args:
+        items: The items that have survived every other document filter.
+        maps_by_item: Mapping of item id to the map ids it is sold on.
+
+    Returns:
+        The ids to drop. Two items are in conflict when they share a name, share
+        a map and disagree on gold total, which makes a question about that item
+        in that mode unanswerable rather than merely ambiguous. The one Community
+        Dragon publishes under the other's display-name locale key is the copy
+        and loses; when both or neither is such a copy the source breaks no tie,
+        so nothing is dropped and the conflict is logged for a human.
+    """
+    by_name: dict[str, list[Item]] = defaultdict(list)
+    for item in items:
+        by_name[item.name].append(item)
+
+    dropped: set[str] = set()
+    for name, group in by_name.items():
+        for left, right in combinations(group, 2):
+            if not set(maps_by_item[left.ddragon_id]) & set(maps_by_item[right.ddragon_id]):
+                continue
+            if left.gold_total == right.gold_total:
+                continue
+            copies = [item for item in (left, right) if item.display_name_id is not None]
+            if len(copies) != 1:
+                logger.warning(
+                    "items %s and %s both claim to be %s in the same mode at %d and %d gold,"
+                    " and the source names no copy",
+                    left.ddragon_id,
+                    right.ddragon_id,
+                    name,
+                    left.gold_total,
+                    right.gold_total,
+                )
+                continue
+            logger.info(
+                "dropping item %s, a copy of %s that contradicts %s on the gold cost of %s",
+                copies[0].ddragon_id,
+                copies[0].display_name_id,
+                (right if copies[0] is left else left).ddragon_id,
+                name,
+            )
+            dropped.add(copies[0].ddragon_id)
+    return dropped
+
+
 def build_documents(session: Session) -> list[BuiltDocument]:
     """Build one document for every entity that carries retrievable prose.
 
@@ -546,9 +701,12 @@ def build_documents(session: Session) -> list[BuiltDocument]:
 
     Returns:
         One BuiltDocument per ability, purchasable item, rune, summoner spell,
-        champion, story and faction, in that order. Items are filtered to the
-        ones a player can actually buy somewhere: purchasable, listed in the
-        shop, and available on at least one map. The rows the filter passes over
+        champion, champion stats row, story and faction, in that order. Items
+        are filtered to the ones a player can actually buy somewhere:
+        purchasable, listed in the shop, available on at least one map, and not
+        declared by Community Dragon to be a mode variant of another item. What
+        remains is then checked for the copies that would contradict an item
+        they share a name and a mode with. The rows every filter passes over
         stay in the items table as graph nodes with their components intact,
         because this is a document-build filter and not a deletion.
 
@@ -570,6 +728,7 @@ def build_documents(session: Session) -> list[BuiltDocument]:
             .where(
                 Item.purchasable.is_(True),
                 Item.in_store.is_(True),
+                Item.variant_of_id.is_(None),
                 exists().where(item_map.c.item_id == Item.ddragon_id),
             )
             .options(selectinload(Item.values))
@@ -580,6 +739,8 @@ def build_documents(session: Session) -> list[BuiltDocument]:
     )
     tags_by_item = _grouped(session, item_tag, item_tag.c.tag)
     maps_by_item = _grouped(session, item_map, item_map.c.map_id)
+    copies = contradicting_copies(items, maps_by_item)
+    items = [item for item in items if item.ddragon_id not in copies]
     runes = (
         session.execute(select(Rune).options(selectinload(Rune.path)).order_by(Rune.id))
         .scalars()
@@ -595,9 +756,19 @@ def build_documents(session: Session) -> list[BuiltDocument]:
         .scalars()
         .all()
     )
+    champion_stats = (
+        session.execute(
+            select(ChampionStats)
+            .options(selectinload(ChampionStats.champion))
+            .order_by(ChampionStats.champion_slug)
+        )
+        .scalars()
+        .all()
+    )
     stories = session.execute(select(Story).order_by(Story.slug)).scalars().all()
     factions = session.execute(select(Faction).order_by(Faction.slug)).scalars().all()
 
+    spell_names = Counter(spell.name for spell in spells)
     documents = [
         *(build_ability_document(ability) for ability in abilities),
         *(
@@ -607,8 +778,12 @@ def build_documents(session: Session) -> list[BuiltDocument]:
             for item in items
         ),
         *(build_rune_document(rune) for rune in runes),
-        *(build_summoner_spell_document(spell) for spell in spells),
+        *(
+            build_summoner_spell_document(spell, name_is_shared=spell_names[spell.name] > 1)
+            for spell in spells
+        ),
         *(build_champion_document(champion) for champion in champions),
+        *(build_champion_stats_document(stats) for stats in champion_stats),
         *(build_story_document(story) for story in stories),
         *(build_faction_document(faction) for faction in factions),
     ]

@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Callable, Iterator
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from lolrag.config import get_settings
 from lolrag.db.models import (
     Ability,
     Champion,
+    ChampionStats,
     Faction,
     Item,
     Role,
@@ -28,9 +30,11 @@ from lolrag.db.models import (
 from lolrag.ingest.associations import AssociationStats
 from lolrag.ingest.identifiers import universe_slug
 from lolrag.ingest.loaders import (
+    CDRAGON_VARIANT_OF_FIELD,
     UNAFFILIATED_SLUG,
     LoadStats,
     build_abilities,
+    build_champion_stats,
     build_champions,
     build_factions,
     build_items,
@@ -38,6 +42,8 @@ from lolrag.ingest.loaders import (
     build_rune_paths,
     build_stories,
     build_summoner_spells,
+    item_display_name_ids,
+    item_variant_ids,
     load_all,
     parse_release_date,
 )
@@ -66,24 +72,68 @@ R_DYNAMIC_DESCRIPTION = "Aatrox grows in size and revives once."
 # ---------- payload fixtures ----------
 
 
+def ddragon_champion_stats(hp: float) -> dict[str, float]:
+    """Build the twenty-field Data Dragon stats block for one champion.
+
+    Args:
+        hp: Base health, varied per champion so the rows can be told apart.
+
+    Returns:
+        A stats object carrying every field the source publishes, with an
+        integer base and a fractional per-level figure so both reach the row.
+    """
+    return {
+        "hp": hp,
+        "hpperlevel": 114,
+        "mp": 0,
+        "mpperlevel": 0,
+        "movespeed": 345,
+        "armor": 38,
+        "armorperlevel": 4.8,
+        "spellblock": 32,
+        "spellblockperlevel": 2.05,
+        "attackrange": 175,
+        "hpregen": 3,
+        "hpregenperlevel": 0.5,
+        "mpregen": 0,
+        "mpregenperlevel": 0,
+        "crit": 0,
+        "critperlevel": 0,
+        "attackdamage": 60,
+        "attackdamageperlevel": 5,
+        "attackspeedperlevel": 2.5,
+        "attackspeed": 0.651,
+    }
+
+
 def ddragon_champion_list() -> dict[str, Any]:
     """Build a Data Dragon champion.json body covering two playable champions.
 
     Returns:
         Payload whose "data" key maps champion id to a summary carrying the
-        numeric key and the role tags.
+        numeric key, the role tags and the base stats block.
     """
     return {
         "data": {
-            "Aatrox": {"id": "Aatrox", "key": "266", "name": "Aatrox", "tags": ["Fighter"]},
+            "Aatrox": {
+                "id": "Aatrox",
+                "key": "266",
+                "name": "Aatrox",
+                "tags": ["Fighter"],
+                "stats": ddragon_champion_stats(650),
+            },
             "Renata": {
                 "id": "Renata",
                 "key": "888",
                 "name": "Renata Glasc",
                 "tags": ["Support", "Mage"],
+                "stats": ddragon_champion_stats(544),
             },
         }
     }
+
+
+ROSTER: dict[str, Any] = {"aatrox": {}, "renataglasc": {}, "norra": {}}
 
 
 def ddragon_champion_detail(champion_id: str) -> dict[str, Any]:
@@ -305,6 +355,29 @@ def ddragon_items() -> dict[str, Any]:
     }
 
 
+def cdragon_item_bin() -> dict[str, Any]:
+    """Build an items.cdtb bin body carrying both Community Dragon variant assertions.
+
+    Returns:
+        Payload keyed "Items/{id}"; 323035 declares itself a variant of 3035 and
+        is also published under 3035's name key, 663035 is published under
+        another id's name key without declaring a variant, and 1036 and 3035
+        declare neither. The non-item key proves the reader ignores it.
+    """
+    return {
+        "Items/1036": {"itemID": 1036, "mDisplayName": "Item_1036_Name", "__type": "ItemData"},
+        "Items/3035": {"itemID": 3035, "mDisplayName": "Item_3035_Name", "__type": "ItemData"},
+        "Items/323035": {
+            "itemID": 323035,
+            "mDisplayName": "Item_3035_Name",
+            "{4f958685}": 3035,
+            "__type": "ItemData",
+        },
+        "Items/663035": {"itemID": 663035, "mDisplayName": "Item_3035_Name", "__type": "ItemData"},
+        "Maps/Map11": {"__type": "MapData"},
+    }
+
+
 def ddragon_runes() -> list[dict[str, Any]]:
     """Build a Data Dragon runesReforged.json body with one path and two rows.
 
@@ -369,6 +442,7 @@ def ddragon_summoner_spells() -> dict[str, Any]:
                 "description": "Teleports your champion a short distance <b>instantly</b>.",
                 "cooldown": [300],
                 "summonerLevel": 7,
+                "modes": ["NEXUSBLITZ", "CLASSIC", "ARAM", "CLASSIC"],
             },
             "SummonerCherryFlash": {
                 "id": "SummonerCherryFlash",
@@ -377,6 +451,7 @@ def ddragon_summoner_spells() -> dict[str, Any]:
                 "description": "Teleports your champion a short distance.",
                 "cooldown": [0.25],
                 "summonerLevel": 1,
+                "modes": ["CHERRY"],
             },
             "Summoner_UltBookPlaceholder": {
                 "id": "Summoner_UltBookPlaceholder",
@@ -621,7 +696,7 @@ def test_build_abilities_rejects_a_champion_without_exactly_four_spells() -> Non
 
 def test_build_items_maps_gold_plaintext_and_depth() -> None:
     """Item gold comes from the gold object and depth stays None when absent."""
-    items = {item.ddragon_id: item for item in build_items(ddragon_items())}
+    items = {item.ddragon_id: item for item in build_items(ddragon_items(), cdragon_item_bin())}
 
     assert items["3035"].gold_total == 1200
     assert items["3035"].gold_base == 500
@@ -633,12 +708,42 @@ def test_build_items_maps_gold_plaintext_and_depth() -> None:
 
 def test_build_items_stores_raw_description_verbatim_and_cleans_description_text() -> None:
     """description keeps the source markup while description_text is its cleaned form."""
-    items = {item.ddragon_id: item for item in build_items(ddragon_items())}
+    items = {item.ddragon_id: item for item in build_items(ddragon_items(), cdragon_item_bin())}
     raw = ddragon_items()["data"]["3035"]["description"]
 
     assert items["3035"].description == raw
     assert items["3035"].description_text == clean_markup(raw)
     assert items["3035"].description_text == "Armor Penetration & more"
+
+
+def test_item_variant_ids_reads_only_the_declared_variants() -> None:
+    """The hashed field is the only variant assertion, and it is read as a string id."""
+    assert item_variant_ids(cdragon_item_bin()) == {"323035": "3035"}
+
+
+def test_item_variant_ids_warns_when_the_hashed_field_matches_nothing(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A rehashed field would silently unfilter the corpus, so it must be visible."""
+    payload = {"Items/3035": {"itemID": 3035, "mDisplayName": "Item_3035_Name"}}
+
+    with caplog.at_level(logging.WARNING):
+        assert item_variant_ids(payload) == {}
+
+    assert CDRAGON_VARIANT_OF_FIELD in caplog.text
+
+
+def test_item_display_name_ids_reports_only_the_records_published_under_another_id() -> None:
+    """A record naming its own id publishes nothing; another id's name key is recorded."""
+    assert item_display_name_ids(cdragon_item_bin()) == {"323035": "3035", "663035": "3035"}
+
+
+def test_build_items_carries_both_community_dragon_variant_assertions() -> None:
+    """Both columns stay NULL for an item Community Dragon says nothing special about."""
+    items = {item.ddragon_id: item for item in build_items(ddragon_items(), cdragon_item_bin())}
+
+    assert items["3035"].variant_of_id is None
+    assert items["3035"].display_name_id is None
 
 
 def test_build_rune_paths_keeps_data_dragon_ids_and_positions() -> None:
@@ -694,6 +799,41 @@ def test_build_summoner_spells_skips_placeholder_entries() -> None:
     assert [spell.id for spell in spells] == ["SummonerFlash", "SummonerCherryFlash"]
 
 
+def test_build_summoner_spells_sorts_and_deduplicates_the_modes() -> None:
+    """The source order varies between spells, so a stable sorted set is stored instead."""
+    spells = {spell.id: spell for spell in build_summoner_spells(ddragon_summoner_spells())}
+
+    assert spells["SummonerFlash"].modes == ["ARAM", "CLASSIC", "NEXUSBLITZ"]
+    assert spells["SummonerCherryFlash"].modes == ["CHERRY"]
+
+
+def test_build_champion_stats_reads_every_published_field() -> None:
+    """All twenty fields reach the row, bases and per-level figures alike."""
+    rows = {row.champion_slug: row for row in build_champion_stats(ddragon_champion_list(), ROSTER)}
+    aatrox = rows["aatrox"]
+
+    assert aatrox.hp == 650
+    assert aatrox.hp_per_level == 114
+    assert aatrox.attack_speed == pytest.approx(0.651)
+    assert aatrox.attack_speed_per_level == 2.5
+    assert aatrox.spell_block_per_level == 2.05
+    assert aatrox.move_speed == 345
+
+
+def test_build_champion_stats_keys_rows_on_the_universe_slug() -> None:
+    """Stats join to the champion table the same way build_champions does."""
+    rows = build_champion_stats(ddragon_champion_list(), ROSTER)
+
+    assert sorted(row.champion_slug for row in rows) == ["aatrox", "renataglasc"]
+
+
+def test_build_champion_stats_skips_a_champion_that_is_not_on_the_roster() -> None:
+    """A Data Dragon champion with no Universe page would dangle, so it yields no row."""
+    rows = build_champion_stats(ddragon_champion_list(), {"aatrox": {}})
+
+    assert [row.champion_slug for row in rows] == ["aatrox"]
+
+
 def test_build_stories_walks_sections_then_subsections() -> None:
     """Both levels are walked and subsections without content are skipped."""
     stories = build_stories({"aatrox-story": universe_story("aatrox-story")})
@@ -734,6 +874,7 @@ def test_build_stories_leaves_author_null() -> None:
 DDRAGON_DATA_PATH = "/cdn/16.14.1/data/en_US"
 UNIVERSE_PATH = "/v1/en_us"
 CDRAGON_BIN_PATH = "/latest/game/data/characters"
+CDRAGON_ITEM_BIN_PATH = "/latest/game/items.cdtb.bin.json"
 CDRAGON_CHAMPION_PATH = "/latest/plugins/rcp-be-lol-game-data/global/default/v1/champions"
 
 CHAMPION_SLUGS = ("aatrox", "renataglasc", "norra")
@@ -745,6 +886,7 @@ EXPECTED_STATS = LoadStats(
     factions=2,
     roles=3,
     champions=3,
+    champion_stats=2,
     abilities=10,
     stories=3,
     items=2,
@@ -779,6 +921,7 @@ def build_routes() -> dict[str, Any]:
         f"{DDRAGON_DATA_PATH}/item.json": ddragon_items(),
         f"{DDRAGON_DATA_PATH}/runesReforged.json": ddragon_runes(),
         f"{DDRAGON_DATA_PATH}/summoner.json": ddragon_summoner_spells(),
+        CDRAGON_ITEM_BIN_PATH: cdragon_item_bin(),
         f"{UNIVERSE_PATH}/search/index.json": {
             "champions": [{"slug": slug} for slug in CHAMPION_SLUGS],
             "factions": [{"slug": slug} for slug in FACTION_SLUGS],
@@ -861,6 +1004,7 @@ def row_counts(session: Session) -> dict[str, int]:
         "factions": Faction,
         "roles": Role,
         "champions": Champion,
+        "champion_stats": ChampionStats,
         "abilities": Ability,
         "stories": Story,
         "items": Item,
@@ -892,6 +1036,7 @@ EXPECTED_COUNTS = {
     "factions": 2,
     "roles": 3,
     "champions": 3,
+    "champion_stats": 2,
     "abilities": 10,
     "stories": 3,
     "items": 2,

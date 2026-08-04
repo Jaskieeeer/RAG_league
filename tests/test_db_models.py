@@ -27,6 +27,7 @@ _EXPECTED_TABLES = {
     "factions",
     "roles",
     "champions",
+    "champion_stats",
     "abilities",
     "stories",
     "items",

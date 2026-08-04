@@ -157,6 +157,75 @@ class Champion(Base):
     )
 
 
+class ChampionStats(Base):
+    """The base statistics Data Dragon publishes for one playable champion.
+
+    Held apart from Champion rather than folded into it because the champion
+    roster comes from Riot Universe and includes lore-only characters that have
+    no Data Dragon entry and therefore no statistics at all; twenty nullable
+    columns on Champion would state that those characters have unknown values
+    when in truth they have none.
+
+    Every per-level column is the increment the source publishes, not the value
+    at any particular level: Riot's own growth curve is not a plain multiple of
+    it, so nothing here may be summed into a level-18 total.
+
+    Args:
+        champion_slug: Foreign key to the champion, primary key, cascades on
+            delete.
+        hp: Base health.
+        hp_per_level: Published health growth per level.
+        mp: Base value of the champion's primary resource, 0 for champions that
+            use none.
+        mp_per_level: Published primary-resource growth per level.
+        move_speed: Base movement speed.
+        armor: Base armor.
+        armor_per_level: Published armor growth per level.
+        spell_block: Base magic resistance.
+        spell_block_per_level: Published magic resistance growth per level.
+        attack_range: Base attack range.
+        hp_regen: Base health regeneration.
+        hp_regen_per_level: Published health regeneration growth per level.
+        mp_regen: Base primary-resource regeneration.
+        mp_regen_per_level: Published primary-resource regeneration growth per
+            level.
+        crit: Base critical strike chance.
+        crit_per_level: Published critical strike chance growth per level.
+        attack_damage: Base attack damage.
+        attack_damage_per_level: Published attack damage growth per level.
+        attack_speed: Base attack speed.
+        attack_speed_per_level: Published attack speed growth per level.
+    """
+
+    __tablename__ = "champion_stats"
+
+    champion_slug: Mapped[str] = mapped_column(
+        ForeignKey("champions.slug", ondelete="CASCADE"), primary_key=True
+    )
+    hp: Mapped[float] = mapped_column(Float)
+    hp_per_level: Mapped[float] = mapped_column(Float)
+    mp: Mapped[float] = mapped_column(Float)
+    mp_per_level: Mapped[float] = mapped_column(Float)
+    move_speed: Mapped[float] = mapped_column(Float)
+    armor: Mapped[float] = mapped_column(Float)
+    armor_per_level: Mapped[float] = mapped_column(Float)
+    spell_block: Mapped[float] = mapped_column(Float)
+    spell_block_per_level: Mapped[float] = mapped_column(Float)
+    attack_range: Mapped[float] = mapped_column(Float)
+    hp_regen: Mapped[float] = mapped_column(Float)
+    hp_regen_per_level: Mapped[float] = mapped_column(Float)
+    mp_regen: Mapped[float] = mapped_column(Float)
+    mp_regen_per_level: Mapped[float] = mapped_column(Float)
+    crit: Mapped[float] = mapped_column(Float)
+    crit_per_level: Mapped[float] = mapped_column(Float)
+    attack_damage: Mapped[float] = mapped_column(Float)
+    attack_damage_per_level: Mapped[float] = mapped_column(Float)
+    attack_speed: Mapped[float] = mapped_column(Float)
+    attack_speed_per_level: Mapped[float] = mapped_column(Float)
+
+    champion: Mapped["Champion"] = relationship()
+
+
 class Ability(Base):
     """A champion ability, either a passive or a Q/W/E/R spell.
 
@@ -249,6 +318,14 @@ class Item(Base):
         in_store: Source inStore flag, False for entries the shop never lists.
             The source omits it far more often than it publishes it, and an
             absent flag means True.
+        variant_of_id: Item id this record declares itself a mode variant of,
+            as published by Community Dragon; NULL when it declares none. Not a
+            foreign key: it records what the source asserts, including an
+            assertion about an id Data Dragon does not publish.
+        display_name_id: Item id whose name string this record is published
+            under, as named by the Community Dragon display-name locale key;
+            NULL when the record is published under its own id. Not a foreign
+            key, for the same reason.
     """
 
     __tablename__ = "items"
@@ -263,6 +340,8 @@ class Item(Base):
     depth: Mapped[int | None] = mapped_column(nullable=True)
     purchasable: Mapped[bool] = mapped_column()
     in_store: Mapped[bool] = mapped_column()
+    variant_of_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    display_name_id: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     components: Mapped[list["Item"]] = relationship(
         "Item",
@@ -462,6 +541,10 @@ class SummonerSpell(Base):
             embedding.
         cooldown: Cooldown in seconds as a float, nullable.
         summoner_level: Minimum summoner level required, nullable.
+        modes: Raw game-mode enum strings the source lists the spell under, in
+            ascending order. Stored as an array rather than an association
+            table because a mode is a bare source enum with no entity of its
+            own and nothing else in the schema refers to one.
     """
 
     __tablename__ = "summoner_spells"
@@ -473,6 +556,7 @@ class SummonerSpell(Base):
     description_text: Mapped[str] = mapped_column(Text)
     cooldown: Mapped[float | None] = mapped_column(Float, nullable=True)
     summoner_level: Mapped[int | None] = mapped_column(nullable=True)
+    modes: Mapped[list[str]] = mapped_column(ARRAY(String(64)), default=list)
 
 
 # ---------- retrieval ----------
@@ -488,7 +572,7 @@ class Document(Base):
         id: Surrogate primary key.
         doc_key: Unique deterministic document identifier.
         collection: Logical collection this document belongs to, one of
-            'abilities', 'equipment', 'lore'.
+            'abilities', 'champion_stats', 'equipment', 'lore'.
         champion_slug: Foreign key to the source champion, nullable.
         story_slug: Foreign key to the source story, nullable.
         faction_slug: Foreign key to the source faction, nullable.
@@ -515,7 +599,8 @@ class Document(Base):
             name="ck_documents_exactly_one_entity",
         ),
         CheckConstraint(
-            "collection IN ('abilities','equipment','lore')", name="ck_documents_collection"
+            "collection IN ('abilities','champion_stats','equipment','lore')",
+            name="ck_documents_collection",
         ),
         Index(
             "ix_documents_champion_slug",

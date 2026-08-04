@@ -1,5 +1,7 @@
 import hashlib
+from collections import defaultdict
 from collections.abc import Iterator
+from itertools import combinations
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +10,15 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 
 from lolrag.config import get_settings
-from lolrag.db.models import Ability, AbilityValue, Base, Document, story_champion
+from lolrag.db.models import (
+    Ability,
+    AbilityValue,
+    Base,
+    Document,
+    Item,
+    item_map,
+    story_champion,
+)
 from lolrag.fetch.client import FetchClient
 from lolrag.ingest.documents import ENTITY_COLUMNS, load_documents
 from lolrag.ingest.identifiers import PASSIVE_SLOT
@@ -25,6 +35,7 @@ EXPECTED_COUNTS = {
     "factions": 14,
     "roles": 6,
     "champions": 174,
+    "champion_stats": 173,
     "abilities": 865,
     "stories": 199,
     "items": 706,
@@ -39,11 +50,16 @@ EXPECTED_COUNTS = {
     "item_tag": 2402,
     "item_map": 1342,
     "item_components": 508,
-    "documents": 1844,
-    "chunks": 7499,
+    "documents": 1995,
+    "chunks": 7650,
 }
 
-EXPECTED_DOCUMENTS_BY_COLLECTION = {"abilities": 865, "equipment": 592, "lore": 387}
+EXPECTED_DOCUMENTS_BY_COLLECTION = {
+    "abilities": 865,
+    "champion_stats": 173,
+    "equipment": 570,
+    "lore": 387,
+}
 
 DOC_KEY_PREFIX_COLLECTIONS = {
     "ability": ("abilities", "ability_id"),
@@ -51,6 +67,7 @@ DOC_KEY_PREFIX_COLLECTIONS = {
     "rune": ("equipment", "rune_id"),
     "summoner_spell": ("equipment", "summoner_spell_id"),
     "champion": ("lore", "champion_slug"),
+    "stats": ("champion_stats", "champion_slug"),
     "story": ("lore", "story_slug"),
     "faction": ("lore", "faction_slug"),
 }
@@ -211,7 +228,7 @@ def stat_formula_counts(session: Session) -> dict[str, int]:
 async def test_run_ingest_gives_every_document_the_collection_its_entity_belongs_to(
     db_session: Session,
 ) -> None:
-    """Each of the 1844 documents lands in its entity's collection with exactly one entity key."""
+    """Each of the 1995 documents lands in its entity's collection with exactly one entity key."""
     settings = get_settings()
     async with FetchClient(settings) as client:
         await run_ingest(db_session, client, settings)
@@ -250,6 +267,46 @@ async def test_run_ingest_re_embeds_nothing_when_the_documents_are_unchanged(
     assert second.documents_changed == 0
     assert second.chunks_written == 0
     assert second.chunks_skipped == EXPECTED_COUNTS["chunks"]
+
+
+def test_no_two_item_documents_price_one_item_differently_in_one_mode(
+    corpus_session: Session,
+) -> None:
+    """No item name carries two prices in a mode a reader could ask about.
+
+    The corpus is about to be frozen and scored, and a question is only
+    scoreable if it has one correct answer. Riot ships mode variants of an item
+    under their own ids, and before this filter twenty-seven names appeared on
+    more than one document with overlapping map sets, most of them disagreeing
+    on gold: "how much does Shurelya's Battlesong cost on Summoner's Rift" had
+    two right answers. The assertion is the invariant rather than a count of
+    survivors, so it keeps its meaning when Riot ships a patch that adds or
+    retires a variant.
+    """
+    maps: dict[str, set[int]] = defaultdict(set)
+    for item_id, map_id in corpus_session.execute(select(item_map.c.item_id, item_map.c.map_id)):
+        maps[item_id].add(map_id)
+
+    documented = corpus_session.execute(
+        select(Item.ddragon_id, Item.name, Item.gold_total).join(
+            Document, Document.item_id == Item.ddragon_id
+        )
+    ).all()
+    assert documented
+
+    by_name: dict[str, list[tuple[str, int]]] = defaultdict(list)
+    for item_id, name, gold_total in documented:
+        by_name[name].append((item_id, gold_total))
+
+    contradictions = [
+        f"{name}: {left} costs {left_gold} and {right} costs {right_gold},"
+        f" both on maps {sorted(maps[left] & maps[right])}"
+        for name, group in by_name.items()
+        for (left, left_gold), (right, right_gold) in combinations(group, 2)
+        if maps[left] & maps[right] and left_gold != right_gold
+    ]
+
+    assert contradictions == []
 
 
 async def test_run_ingest_resolves_the_measured_share_of_tooltips(db_session: Session) -> None:

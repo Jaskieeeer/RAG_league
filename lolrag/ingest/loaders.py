@@ -1,5 +1,19 @@
+"""Entity row builders and the ingest stage that persists them.
+
+CDRAGON_VARIANT_OF_FIELD is an obfuscated Community Dragon field name. Riot
+ships these bins with the field names hashed, and a rehash renames the field
+without warning, so its meaning is recorded here rather than inferred at the
+call site: a record under "Items/{id}" carrying that field is declaring itself a
+mode variant of the base item whose id is the field's value, for example
+"Items/322065" carrying 2065. Verified 2026-08-04 against patch 16.14.1, where
+26 records carry it, all of them with six-digit "32xxxx" ids. build_items logs a
+warning when no record carries it at all, so a rehash surfaces as a message
+rather than as a silently unfiltered corpus.
+"""
+
 import asyncio
 import logging
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -13,6 +27,7 @@ from lolrag.db.models import (
     Ability,
     Base,
     Champion,
+    ChampionStats,
     Faction,
     Item,
     Role,
@@ -37,6 +52,12 @@ UNAFFILIATED_NAME = "Unaffiliated"
 PLACEHOLDER_SPELL_SUFFIX = "Placeholder"
 
 DYNAMIC_DESCRIPTION_KEY = "dynamicDescription"
+MODES_KEY = "modes"
+
+ITEM_RECORD_PREFIX = "Items/"
+CDRAGON_VARIANT_OF_FIELD = "{4f958685}"
+CDRAGON_DISPLAY_NAME_FIELD = "mDisplayName"
+CDRAGON_ITEM_NAME_KEY_PATTERN = re.compile(r"^Item_(\d+)_Name$")
 
 STORY_BLOCK_SEPARATOR = "\n\n"
 STORY_SCENE_SEPARATOR = "\n\n\n"
@@ -282,23 +303,83 @@ def build_abilities(
     return abilities
 
 
-def build_items(payload: dict) -> list[Item]:
+def item_variant_ids(item_bin: Mapping[str, Any]) -> dict[str, str]:
+    """Read the base item every Community Dragon record declares itself a variant of.
+
+    Args:
+        item_bin: Parsed Community Dragon items.cdtb bin file, keyed
+            "Items/{id}".
+
+    Returns:
+        Mapping of item id to the id of the base item its record names through
+        CDRAGON_VARIANT_OF_FIELD, empty for every record that names none. An
+        empty result is logged as a warning rather than raised on, because a
+        rehashed field is a corpus-quality regression and not a broken ingest.
+    """
+    variants: dict[str, str] = {}
+    for key, record in item_bin.items():
+        if not key.startswith(ITEM_RECORD_PREFIX) or not isinstance(record, dict):
+            continue
+        base = record.get(CDRAGON_VARIANT_OF_FIELD)
+        if base is not None:
+            variants[key.removeprefix(ITEM_RECORD_PREFIX)] = str(base)
+    if not variants:
+        logger.warning(
+            "no Community Dragon item record carries %s; Riot may have rehashed the field"
+            " and every mode variant will now get its own document",
+            CDRAGON_VARIANT_OF_FIELD,
+        )
+    return variants
+
+
+def item_display_name_ids(item_bin: Mapping[str, Any]) -> dict[str, str]:
+    """Read the item id whose name string each Community Dragon record is published under.
+
+    Args:
+        item_bin: Parsed Community Dragon items.cdtb bin file, keyed
+            "Items/{id}".
+
+    Returns:
+        Mapping of item id to the different item id named by its display-name
+        locale key. Records published under their own id are absent, as are the
+        records whose key follows another convention entirely, such as the
+        lowercase "game_item_displayname_{id}" form.
+    """
+    published: dict[str, str] = {}
+    for key, record in item_bin.items():
+        if not key.startswith(ITEM_RECORD_PREFIX) or not isinstance(record, dict):
+            continue
+        item_id = key.removeprefix(ITEM_RECORD_PREFIX)
+        match = CDRAGON_ITEM_NAME_KEY_PATTERN.match(record.get(CDRAGON_DISPLAY_NAME_FIELD) or "")
+        if match is not None and match.group(1) != item_id:
+            published[item_id] = match.group(1)
+    return published
+
+
+def build_items(payload: dict, item_bin: Mapping[str, Any]) -> list[Item]:
     """Build the item rows, without their build recipes.
 
     Args:
         payload: Parsed Data Dragon item.json body, whose "data" key maps item
             id to a record carrying name, description, plaintext, gold and an
             optional "from" list of component ids.
+        item_bin: Parsed Community Dragon items.cdtb bin file, supplying the two
+            variant assertions Data Dragon does not publish.
 
     Returns:
-        One Item per record, every raw row kept. Recipes are not attached here
-        because a component link carries a quantity, which the plain
-        many-to-many relationship cannot express; the association loader writes
-        those rows instead. purchasable and in_store are stored so the document
-        builder can tell shop content from engine-side entries in SQL; the
-        source omits inStore far more often than it publishes it, so an absent
-        flag is read as True.
+        One Item per Data Dragon record, every raw row kept. Recipes are not
+        attached here because a component link carries a quantity, which the
+        plain many-to-many relationship cannot express; the association loader
+        writes those rows instead. purchasable and in_store are stored so the
+        document builder can tell shop content from engine-side entries in SQL;
+        the source omits inStore far more often than it publishes it, so an
+        absent flag is read as True. variant_of_id and display_name_id carry
+        Community Dragon's two assertions about which base item a record stands
+        in for, and are NULL for every item that has no Community Dragon record
+        at all.
     """
+    variants = item_variant_ids(item_bin)
+    display_names = item_display_name_ids(item_bin)
     return [
         Item(
             ddragon_id=item_id,
@@ -311,6 +392,8 @@ def build_items(payload: dict) -> list[Item]:
             depth=record.get("depth"),
             purchasable=bool(record["gold"].get("purchasable")),
             in_store=record.get("inStore") is not False,
+            variant_of_id=variants.get(item_id),
+            display_name_id=display_names.get(item_id),
         )
         for item_id, record in payload["data"].items()
     ]
@@ -363,7 +446,10 @@ def build_summoner_spells(payload: dict) -> list[SummonerSpell]:
         One SummonerSpell per record whose id does not end in
         PLACEHOLDER_SPELL_SUFFIX, those being engine scaffolding rather than
         castable spells. cooldown is the first element of the cooldown list in
-        seconds, or None when the list is empty.
+        seconds, or None when the list is empty. modes holds the source's raw
+        mode enums, deduplicated and sorted so a rebuild over unchanged data
+        produces the same row: the source order varies between spells and
+        carries no meaning.
     """
     spells: list[SummonerSpell] = []
     for spell_id, record in payload["data"].items():
@@ -381,9 +467,66 @@ def build_summoner_spells(payload: dict) -> list[SummonerSpell]:
                 description_text=clean_markup(description),
                 cooldown=float(cooldown[0]) if cooldown else None,
                 summoner_level=record.get("summonerLevel"),
+                modes=sorted(set(record.get(MODES_KEY) or [])),
             )
         )
     return spells
+
+
+def build_champion_stats(
+    champion_list: dict, universe_payloads: Mapping[str, Any]
+) -> list[ChampionStats]:
+    """Build the base statistics row for every champion Data Dragon publishes stats for.
+
+    Args:
+        champion_list: Parsed Data Dragon champion.json body, whose "data" key
+            maps champion id to a summary carrying a 20-field "stats" object.
+        universe_payloads: Mapping of Universe champion slug to that champion's
+            parsed Universe payload. Only its keys are read, as the roster the
+            stats rows must key against.
+
+    Returns:
+        One ChampionStats per Data Dragon champion whose Universe slug is on the
+        roster. The slug is derived the same way build_champions derives it, so
+        the two agree by construction; a Data Dragon champion with no Universe
+        page would violate the foreign key and is skipped with a warning
+        instead.
+    """
+    ddragon_id_by_slug = {
+        universe_slug(ddragon_id): ddragon_id for ddragon_id in champion_list["data"]
+    }
+    rows: list[ChampionStats] = []
+    for slug, ddragon_id in ddragon_id_by_slug.items():
+        if slug not in universe_payloads:
+            logger.warning("champion %s has no Universe page, skipping its stats", ddragon_id)
+            continue
+        stats = champion_list["data"][ddragon_id]["stats"]
+        rows.append(
+            ChampionStats(
+                champion_slug=slug,
+                hp=float(stats["hp"]),
+                hp_per_level=float(stats["hpperlevel"]),
+                mp=float(stats["mp"]),
+                mp_per_level=float(stats["mpperlevel"]),
+                move_speed=float(stats["movespeed"]),
+                armor=float(stats["armor"]),
+                armor_per_level=float(stats["armorperlevel"]),
+                spell_block=float(stats["spellblock"]),
+                spell_block_per_level=float(stats["spellblockperlevel"]),
+                attack_range=float(stats["attackrange"]),
+                hp_regen=float(stats["hpregen"]),
+                hp_regen_per_level=float(stats["hpregenperlevel"]),
+                mp_regen=float(stats["mpregen"]),
+                mp_regen_per_level=float(stats["mpregenperlevel"]),
+                crit=float(stats["crit"]),
+                crit_per_level=float(stats["critperlevel"]),
+                attack_damage=float(stats["attackdamage"]),
+                attack_damage_per_level=float(stats["attackdamageperlevel"]),
+                attack_speed=float(stats["attackspeed"]),
+                attack_speed_per_level=float(stats["attackspeedperlevel"]),
+            )
+        )
+    return rows
 
 
 def build_stories(payloads: dict[str, dict]) -> list[Story]:
@@ -444,6 +587,8 @@ class LoadStats:
             "unaffiliated" row.
         roles: Number of role rows persisted.
         champions: Number of champion rows persisted.
+        champion_stats: Number of champion base statistics rows persisted, one
+            per playable champion and none for the lore-only characters.
         abilities: Number of ability rows persisted.
         stories: Number of story rows persisted.
         items: Number of item rows persisted.
@@ -466,6 +611,7 @@ class LoadStats:
     factions: int
     roles: int
     champions: int
+    champion_stats: int
     abilities: int
     stories: int
     items: int
@@ -536,18 +682,21 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
         tables are rewritten too, once every entity they reference exists. The
         Community Dragon bins and records are fetched here rather than shared
         with the value loader, which fetches them again: both stages read them
-        from the on-disk cache, so the second read costs no request.
+        from the on-disk cache, so the second read costs no request. The item
+        bin is fetched for its variant assertions alone; the values it also
+        carries stay the value loader's business.
 
     Raises:
         httpx.HTTPStatusError: If any request fails after its retries.
         sqlalchemy.exc.SQLAlchemyError: If any row violates the schema.
         ValueError: If a Data Dragon spell cannot be joined to the bin.
     """
-    champion_list, item_payload, rune_payload, spell_payload = await asyncio.gather(
+    champion_list, item_payload, rune_payload, spell_payload, item_bin = await asyncio.gather(
         ddragon.fetch_champion_list(client, settings),
         ddragon.fetch_items(client, settings),
         ddragon.fetch_runes(client, settings),
         ddragon.fetch_summoner_spells(client, settings),
+        cdragon_bin.fetch_item_bin(client, settings),
     )
     champion_ids = list(champion_list["data"])
     champion_keys = [int(entry["key"]) for entry in champion_list["data"].values()]
@@ -599,6 +748,10 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
     _merge_all(session, champions)
     session.flush()
 
+    champion_stats = build_champion_stats(champion_list, universe_champions)
+    _merge_all(session, champion_stats)
+    session.flush()
+
     abilities = build_abilities(details, bins, cdragon_champions)
     _assign_existing_ability_ids(session, abilities)
     _merge_all(session, abilities)
@@ -608,7 +761,7 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
     _merge_all(session, stories)
     session.flush()
 
-    items = build_items(item_payload)
+    items = build_items(item_payload, item_bin)
     _merge_all(session, items)
     session.flush()
 
@@ -626,6 +779,7 @@ async def load_all(session: Session, client: FetchClient, settings: Settings) ->
         factions=len(factions),
         roles=len(roles),
         champions=len(champions),
+        champion_stats=len(champion_stats),
         abilities=len(abilities),
         stories=len(stories),
         items=len(items),

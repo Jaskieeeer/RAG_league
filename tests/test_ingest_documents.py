@@ -9,6 +9,7 @@ from lolrag.db.models import (
     Ability,
     AbilityValue,
     Champion,
+    ChampionStats,
     Chunk,
     Document,
     Faction,
@@ -24,6 +25,7 @@ from lolrag.ingest.documents import (
     MAP_NAMES,
     build_ability_document,
     build_champion_document,
+    build_champion_stats_document,
     build_faction_document,
     build_item_document,
     build_rune_document,
@@ -31,7 +33,9 @@ from lolrag.ingest.documents import (
     build_story_document,
     build_summoner_spell_document,
     chunk_document,
+    contradicting_copies,
     load_documents,
+    mode_name,
     render_value,
 )
 
@@ -237,6 +241,59 @@ def test_build_item_document_rejects_a_map_id_the_constant_does_not_name() -> No
         build_item_document(item(), [], [99])
 
 
+def named_item(item_id: str, gold: int, display_name_id: str | None = None) -> Item:
+    """Build a transient item that shares one name with every other this helper makes.
+
+    Args:
+        item_id: Data Dragon item id.
+        gold: Gold total the item claims.
+        display_name_id: Item id whose name string Community Dragon publishes
+            this record under, or None when it is published under its own.
+
+    Returns:
+        An Item named Hextech Gunblade, the corpus case this rule exists for.
+    """
+    return Item(
+        ddragon_id=item_id,
+        name="Hextech Gunblade",
+        description="<mainText>Gunblade</mainText>",
+        description_text="Gunblade.",
+        gold_total=gold,
+        gold_base=gold,
+        purchasable=True,
+        in_store=True,
+        display_name_id=display_name_id,
+    )
+
+
+def test_contradicting_copies_drops_the_copy_that_disagrees_on_gold() -> None:
+    """Two prices for one name in one mode is unanswerable, so the named copy loses."""
+    items = [named_item("3146", 3000), named_item("663146", 2500, display_name_id="223146")]
+
+    assert contradicting_copies(items, {"3146": [11, 12], "663146": [11]}) == {"663146"}
+
+
+def test_contradicting_copies_keeps_two_items_that_agree_on_gold() -> None:
+    """A duplicate name is only a problem when the two documents contradict each other."""
+    items = [named_item("3146", 3000), named_item("663146", 3000, display_name_id="223146")]
+
+    assert contradicting_copies(items, {"3146": [11, 12], "663146": [11]}) == set()
+
+
+def test_contradicting_copies_keeps_two_items_sold_in_different_modes() -> None:
+    """Disjoint map sets already separate the two answers, so neither is dropped."""
+    items = [named_item("3146", 3000), named_item("223146", 2500, display_name_id="3146")]
+
+    assert contradicting_copies(items, {"3146": [11, 12], "223146": [30]}) == set()
+
+
+def test_contradicting_copies_breaks_no_tie_the_source_does_not_break() -> None:
+    """When neither item is a published copy the source names no loser, so nothing is dropped."""
+    items = [named_item("3146", 3000), named_item("663146", 2500)]
+
+    assert contradicting_copies(items, {"3146": [11], "663146": [11]}) == set()
+
+
 def test_build_rune_document_calls_a_row_zero_rune_a_keystone() -> None:
     """Row zero of every path holds the keystones, which the title must say."""
     path = RunePath(id=8100, key="Domination", name="Domination")
@@ -278,24 +335,145 @@ def test_build_rune_document_drops_a_long_description_that_repeats_the_short_one
     assert build_rune_document(rune).content.count("Same text.") == 1
 
 
-def test_build_summoner_spell_document_states_cooldown_and_unlock_level() -> None:
-    """Both facts the source publishes reach the document."""
-    spell = SummonerSpell(
-        id="SummonerFlash",
+def summoner_spell(
+    spell_id: str = "SummonerFlash", modes: list[str] | None = None
+) -> SummonerSpell:
+    """Build a transient summoner spell.
+
+    Args:
+        spell_id: Data Dragon summoner spell id.
+        modes: Raw mode enums the spell is published under, defaulting to the
+            three-mode set that stands for a spell available nearly everywhere.
+
+    Returns:
+        A SummonerSpell carrying both facts the source publishes about it.
+    """
+    return SummonerSpell(
+        id=spell_id,
         key="4",
         name="Flash",
         description="<br>Teleports.",
         description_text="Teleports.",
         cooldown=300.0,
         summoner_level=7,
+        modes=["ARAM", "CLASSIC", "NEXUSBLITZ"] if modes is None else modes,
     )
 
-    document = build_summoner_spell_document(spell)
+
+def test_build_summoner_spell_document_states_cooldown_and_unlock_level() -> None:
+    """Both facts the source publishes reach the document."""
+    document = build_summoner_spell_document(summoner_spell(), name_is_shared=False)
 
     assert document.title == "Flash (summoner spell)"
     assert document.doc_key == "summoner_spell:SummonerFlash"
     assert "Cooldown: 300 seconds" in document.content
     assert "Unlocked at summoner level 7" in document.content
+
+
+def test_build_summoner_spell_document_lists_the_modes_in_the_header() -> None:
+    """Every spell carries its modes, whether or not its name is shared."""
+    document = build_summoner_spell_document(summoner_spell(), name_is_shared=False)
+
+    assert "Modes: ARAM, CLASSIC, Nexus Blitz" in document.content
+
+
+def test_build_summoner_spell_document_labels_a_shared_name_with_its_only_mode() -> None:
+    """A spell that exists in one mode and shares its name is identified by that mode."""
+    spell = summoner_spell("SummonerCherryFlash", modes=["CHERRY"])
+
+    document = build_summoner_spell_document(spell, name_is_shared=True)
+
+    assert document.title == "Flash (CHERRY summoner spell)"
+
+
+def test_build_summoner_spell_document_leaves_a_many_mode_title_alone() -> None:
+    """A shared name on a spell available nearly everywhere would only bloat the title."""
+    document = build_summoner_spell_document(summoner_spell(), name_is_shared=True)
+
+    assert document.title == "Flash (summoner spell)"
+
+
+def test_mode_name_renders_an_unproven_enum_raw() -> None:
+    """No permitted source names CHERRY, so the corpus states the enum rather than a guess."""
+    assert mode_name("CHERRY") == "CHERRY"
+    assert mode_name("NEXUSBLITZ") == "Nexus Blitz"
+
+
+def champion_stats(champion_row: Champion | None = None) -> ChampionStats:
+    """Build a transient champion stats row.
+
+    Args:
+        champion_row: Champion to attach, or None to leave the relationship
+            unset so the row can be persisted against a champion already stored.
+
+    Returns:
+        A ChampionStats carrying Aatrox's published numbers, including the two
+        stats the source gives no per-level figure for.
+    """
+    row = ChampionStats(
+        champion_slug="aatrox",
+        hp=650.0,
+        hp_per_level=114.0,
+        mp=0.0,
+        mp_per_level=0.0,
+        move_speed=345.0,
+        armor=38.0,
+        armor_per_level=4.8,
+        spell_block=32.0,
+        spell_block_per_level=2.05,
+        attack_range=175.0,
+        hp_regen=3.0,
+        hp_regen_per_level=0.5,
+        mp_regen=0.0,
+        mp_regen_per_level=0.0,
+        crit=0.0,
+        crit_per_level=0.0,
+        attack_damage=60.0,
+        attack_damage_per_level=5.0,
+        attack_speed=0.651,
+        attack_speed_per_level=2.5,
+    )
+    if champion_row is not None:
+        row.champion = champion_row
+    return row
+
+
+def test_build_champion_stats_document_heads_the_numbers_with_the_champion() -> None:
+    """A chunk of bare numbers has to say whose numbers it is."""
+    document = build_champion_stats_document(champion_stats(champion()))
+
+    assert document.title == "Aatrox base statistics"
+    assert document.doc_key == "stats:aatrox"
+    assert document.collection == "champion_stats"
+    assert document.entity_column == "champion_slug"
+    assert "Champion: Aatrox, the Darkin Blade" in document.content
+
+
+def test_build_champion_stats_document_states_growth_without_inventing_a_total() -> None:
+    """Riot's growth curve is not a multiple of the published figure, so no total is stated."""
+    content = build_champion_stats_document(champion_stats(champion())).content
+
+    assert "Health: 650 at level 1, growth 114 per level" in content
+    assert "Attack speed: 0.651 at level 1, growth 2.5 per level" in content
+    assert "level 18" not in content
+
+
+def test_build_champion_stats_document_omits_growth_the_source_does_not_publish() -> None:
+    """Movement speed and attack range have no per-level field, so they carry no growth."""
+    content = build_champion_stats_document(champion_stats(champion())).content
+
+    assert "Movement speed: 345" in content
+    assert "Attack range: 175" in content
+    assert "Movement speed: 345 at level 1" not in content
+
+
+def test_build_champion_stats_document_carries_every_published_field() -> None:
+    """All twenty source fields reach the document, not a chosen subset."""
+    content = build_champion_stats_document(champion_stats(champion())).content
+    stat_lines = [line for line in content.splitlines() if ": " in line and "Champion:" not in line]
+
+    assert len(stat_lines) == 11
+    assert sum(line.count("growth") for line in stat_lines) == 9
 
 
 def test_build_champion_document_leads_with_name_and_title() -> None:
@@ -418,15 +596,19 @@ def db_session() -> Iterator[Session]:
         engine.dispose()
 
 
+SEEDED_DOCUMENTS = 4
+
+
 def seed_entities(session: Session) -> None:
-    """Insert the two entity rows the orchestrator tests build documents from.
+    """Insert the entity rows the orchestrator tests build documents from.
 
     Args:
         session: Open Session the rows are added to.
 
     Returns:
-        None. Both entities are free of foreign keys, so no other table is
-        needed to make the documents insertable.
+        None. The champion and its statistics are seeded together so the run
+        exercises the champion_stats collection against the real check
+        constraint, which no in-memory builder test can do.
     """
     session.add(
         Faction(
@@ -442,8 +624,25 @@ def seed_entities(session: Session) -> None:
             description_text="Teleports.",
             cooldown=300.0,
             summoner_level=7,
+            modes=["CLASSIC"],
         )
     )
+    session.flush()
+    session.add(
+        Champion(
+            slug="aatrox",
+            name="Aatrox",
+            title="the Darkin Blade",
+            faction_slug="noxus",
+            bio_full="Full bio.",
+            bio_full_text="Full bio.",
+            bio_short="Short bio.",
+            bio_short_text="Short bio.",
+            playable=True,
+        )
+    )
+    session.flush()
+    session.add(champion_stats())
     session.flush()
 
 
@@ -453,12 +652,19 @@ def test_load_documents_writes_a_document_and_its_chunks(db_session: Session) ->
 
     stats = load_documents(db_session, get_settings())
 
-    assert stats.documents_built == 2
-    assert stats.documents_changed == 2
-    assert stats.chunks_written == 2
+    assert stats.documents_built == SEEDED_DOCUMENTS
+    assert stats.documents_changed == SEEDED_DOCUMENTS
+    assert stats.chunks_written == SEEDED_DOCUMENTS
     assert stats.chunks_skipped == 0
-    assert db_session.execute(select(func.count()).select_from(Document)).scalar_one() == 2
-    assert db_session.execute(select(func.count()).select_from(Chunk)).scalar_one() == 2
+    assert db_session.execute(select(func.count()).select_from(Document)).scalar_one() == (
+        SEEDED_DOCUMENTS
+    )
+    assert db_session.execute(select(func.count()).select_from(Chunk)).scalar_one() == (
+        SEEDED_DOCUMENTS
+    )
+    assert db_session.execute(
+        select(Document.collection).where(Document.doc_key == "stats:aatrox")
+    ).scalar_one() == ("champion_stats")
 
 
 def test_load_documents_run_twice_changes_nothing_and_embeds_nothing(db_session: Session) -> None:
@@ -468,10 +674,10 @@ def test_load_documents_run_twice_changes_nothing_and_embeds_nothing(db_session:
 
     second = load_documents(db_session, get_settings())
 
-    assert second.documents_built == 2
+    assert second.documents_built == SEEDED_DOCUMENTS
     assert second.documents_changed == 0
     assert second.chunks_written == 0
-    assert second.chunks_skipped == 2
+    assert second.chunks_skipped == SEEDED_DOCUMENTS
 
 
 def test_load_documents_re_embeds_only_the_document_whose_content_changed(
@@ -489,4 +695,4 @@ def test_load_documents_re_embeds_only_the_document_whose_content_changed(
 
     assert stats.documents_changed == 1
     assert stats.chunks_written == 1
-    assert stats.chunks_skipped == 1
+    assert stats.chunks_skipped == SEEDED_DOCUMENTS - 1
