@@ -2,7 +2,6 @@
 __pycache__/
 *.pyc
 .env
-data/chroma/
 data/pgdata/
 data/cache/
 .pytest_cache/
@@ -10,3 +9,4 @@ data/cache/
 *.egg-info/
 .coverage
 docs/
+.claude/
