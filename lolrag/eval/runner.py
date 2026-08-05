@@ -361,11 +361,20 @@ def _generation_settings(settings: Settings) -> Settings:
             and eval_model_name for the harness.
 
     Returns:
-        A copy of settings whose llm_model_name is eval_model_name. Every other
-        field is untouched, so retrieval, the fallback model and the judges keep
-        reading the values they already read.
+        A copy of settings whose llm_model_name and llm_fallback_model_name are
+        both eval_model_name. The fallback is substituted too because a fallback
+        left pointing at the product's model would let one failed call answer
+        with a model the report's generation_model_name does not name, which is
+        the one thing that field exists to guarantee. Every other field is
+        untouched, so retrieval and the judges keep reading the values they
+        already read.
     """
-    return settings.model_copy(update={"llm_model_name": settings.eval_model_name})
+    return settings.model_copy(
+        update={
+            "llm_model_name": settings.eval_model_name,
+            "llm_fallback_model_name": settings.eval_model_name,
+        }
+    )
 
 
 def _grade_answer(

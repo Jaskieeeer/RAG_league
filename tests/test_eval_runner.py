@@ -153,6 +153,8 @@ class Harness:
         self.baseline_calls: list[str] = []
         self.pipeline_models: list[str] = []
         self.baseline_models: list[str] = []
+        self.pipeline_fallbacks: list[str] = []
+        self.baseline_fallbacks: list[str] = []
 
     def _id_of(self, question: str) -> str:
         """Map a question's text back to its golden id.
@@ -174,14 +176,16 @@ class Harness:
         return [chunk(key) for key in self.retrieved[self._id_of(question)]]
 
     def generate(self, question: str, documents: list[Document], settings: Settings) -> str:
-        """Return the fixture pipeline answer for a question, recording its model."""
+        """Return the fixture pipeline answer for a question, recording both its models."""
         self.pipeline_models.append(settings.llm_model_name)
+        self.pipeline_fallbacks.append(settings.llm_fallback_model_name)
         return self.pipeline_answers[self._id_of(question)]
 
     def generate_without_context(self, question: str, settings: Settings) -> str:
-        """Return the fixture baseline answer for a question, recording its model."""
+        """Return the fixture baseline answer for a question, recording both its models."""
         self.baseline_calls.append(self._id_of(question))
         self.baseline_models.append(settings.llm_model_name)
+        self.baseline_fallbacks.append(settings.llm_fallback_model_name)
         return self.baseline_answers[self._id_of(question)]
 
     def judge_faithfulness(
@@ -315,6 +319,21 @@ def test_generation_uses_the_eval_model_and_not_the_product_model(harness: Harne
 
     assert set(harness.pipeline_models) == {"eval-model"}
     assert set(harness.baseline_models) == {"eval-model"}
+
+
+def test_generation_never_falls_back_to_the_product_model(harness: Harness):
+    settings = get_settings().model_copy(
+        update={
+            "llm_model_name": "product-model",
+            "llm_fallback_model_name": "product-fallback",
+            "eval_model_name": "eval-model",
+        }
+    )
+
+    run_evaluation(settings, dataset())
+
+    assert set(harness.pipeline_fallbacks) == {"eval-model"}
+    assert set(harness.baseline_fallbacks) == {"eval-model"}
 
 
 def test_the_report_names_the_models_that_produced_it(harness: Harness):
