@@ -5,10 +5,10 @@ from pydantic import ValidationError
 
 from lolrag.eval.dataset import GoldenDataset, GoldenQuestion, load_golden_dataset
 
-EXPECTED_QUESTIONS = 150
-EXPECTED_SCORING = {"retrieval": 110, "refusal": 30, "limitation": 10}
-EXPECTED_CHECKS = {"numeric": 38, "entailment": 72, "refusal": 30, "none": 10}
-EXPECTED_COLLECTIONS = {"abilities", "equipment", "lore", None}
+EXPECTED_QUESTIONS = 164
+EXPECTED_SCORING = {"retrieval": 120, "refusal": 30, "limitation": 14}
+EXPECTED_CHECKS = {"numeric": 46, "entailment": 74, "refusal": 30, "none": 14}
+EXPECTED_COLLECTIONS = {"abilities", "champion_stats", "equipment", "lore", None}
 
 
 def question(**overrides: object) -> dict[str, object]:
@@ -41,7 +41,7 @@ def question(**overrides: object) -> dict[str, object]:
 def test_packaged_dataset_holds_every_authored_question():
     dataset = load_golden_dataset()
 
-    assert dataset.version == 2
+    assert dataset.version == 3
     assert len(dataset.questions) == EXPECTED_QUESTIONS
 
 

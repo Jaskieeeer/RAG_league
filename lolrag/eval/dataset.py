@@ -48,9 +48,14 @@ class GoldenQuestion(BaseModel):
             "ability:aatrox:Q"; empty for questions with no correct document.
         expected_answer: Reference answer, the only authority the entailment
             judge and the numeric check are allowed to compare against.
-        collection: Collection the answering documents live in, one of
-            abilities, champion_stats, equipment, lore, or None when there is no
-            answering document.
+        collection: Collection a router should search to answer the question,
+            one of abilities, champion_stats, equipment, lore, or None when no
+            collection is the right place to look. This states the routing
+            target, not where the answer lives: a limitation question names the
+            collection it belongs to even though no document there answers it,
+            which is what lets the routing upgrade be scored on questions the
+            retriever cannot currently satisfy. Only the refusal questions,
+            which no collection should be searched for at all, carry None.
         failure_mode: Authoring note naming the failure this question is meant
             to expose.
     """
@@ -66,7 +71,7 @@ class GoldenQuestion(BaseModel):
     )
     expected_doc_keys: list[str] = Field(description="Corpus doc_keys that answer the question.")
     expected_answer: str = Field(description="Reference answer the check compares against.")
-    collection: str | None = Field(description="Collection the answering documents live in.")
+    collection: str | None = Field(description="Collection a router should search.")
     failure_mode: str = Field(description="Failure this question is meant to expose.")
 
     @model_validator(mode="after")

@@ -1,6 +1,6 @@
 {
-  "description": "Golden dataset v2, authored against the Postgres corpus of 1844 documents on Data Dragon patch 16.14.1. Every expected_doc_key is verified to resolve. scoring selects the metric: retrieval questions score hit rate and MRR, refusal questions score only whether the answer declined, limitation questions are known-unanswerable in v1 and excluded from both headline figures.",
-  "version": 2,
+  "description": "Golden dataset v3, authored against the Postgres corpus of 1995 documents on Data Dragon patch 16.14.1: 865 abilities, 570 equipment, 387 lore and 173 champion_stats. Every expected_doc_key is verified to resolve. scoring selects the metric: retrieval questions score hit rate and MRR, refusal questions score only whether the answer declined, limitation questions are known-unanswerable in v1 and excluded from both headline figures. v3 adds the champion_stats block, which v2 left unmeasured.",
+  "version": 3,
   "questions": [
     {
       "id": "abil-mech-001",
@@ -1434,6 +1434,139 @@
       "failure_mode": "14 documents, the weakest-represented entity type"
     },
     {
+      "id": "stat-look-001",
+      "question": "What is Caitlyn's base attack range?",
+      "category": "stats-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:caitlyn"
+      ],
+      "expected_answer": "650. Attack range carries no growth figure, so the document states one number and no per-level increase.",
+      "collection": "champion_stats",
+      "failure_mode": "173 near-identical stat blocks; the champion name is the only token that separates one document from the next"
+    },
+    {
+      "id": "stat-look-002",
+      "question": "What is Aatrox's base attack speed, and what growth figure does the corpus give for it?",
+      "category": "stats-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:aatrox"
+      ],
+      "expected_answer": "0.651 at level 1, growth 2.5% per level. The base is the raw Data Dragon ratio and the growth is a percentage of it, so the two numbers are in different units and neither is converted.",
+      "collection": "champion_stats",
+      "failure_mode": "173 near-identical stat blocks; the champion name is the only token that separates one document from the next"
+    },
+    {
+      "id": "stat-look-003",
+      "question": "What is Garen's base health, and how much health does he gain per level?",
+      "category": "stats-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:garen"
+      ],
+      "expected_answer": "690 at level 1, growth 98 per level. The same document closes with the line \"No resource\", which is how the corpus records a champion who spends none.",
+      "collection": "champion_stats",
+      "failure_mode": "173 near-identical stat blocks; the champion name is the only token that separates one document from the next"
+    },
+    {
+      "id": "stat-look-004",
+      "question": "What is Master Yi's base movement speed?",
+      "category": "stats-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:masteryi"
+      ],
+      "expected_answer": "355. He is the only champion in the corpus published at that value; the next fastest are at 350.",
+      "collection": "champion_stats",
+      "failure_mode": "173 near-identical stat blocks; the champion name is the only token that separates one document from the next"
+    },
+    {
+      "id": "stat-look-005",
+      "question": "What is Thresh's base armor, and how much armor does he gain per level?",
+      "category": "stats-lookup",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:thresh"
+      ],
+      "expected_answer": "33 at level 1, growth 0 per level. Thresh is the only champion in the corpus whose armor growth is 0.",
+      "collection": "champion_stats",
+      "failure_mode": "173 near-identical stat blocks; the champion name is the only token that separates one document from the next"
+    },
+    {
+      "id": "stat-look-006",
+      "question": "Does Viego use a resource such as mana?",
+      "category": "stats-lookup",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "stats:viego"
+      ],
+      "expected_answer": "No. His statistics document ends with the line \"No resource\" and states no pool and no regeneration at all.",
+      "collection": "champion_stats",
+      "failure_mode": "173 near-identical stat blocks; the champion name is the only token that separates one document from the next"
+    },
+    {
+      "id": "stat-disc-001",
+      "question": "Ekko and Locke have almost identical base statistics. Which stat separates them?",
+      "category": "stats-discrimination",
+      "scoring": "retrieval",
+      "check": "entailment",
+      "expected_doc_keys": [
+        "stats:ekko",
+        "stats:locke"
+      ],
+      "expected_answer": "Health growth. Ekko gains 99 per level and Locke gains 109; the other ten stat lines in the two documents are identical.",
+      "collection": "champion_stats",
+      "failure_mode": "near-duplicate stat blocks; a neighbouring champion's document answers plausibly and wrongly, so a miss reads as a correct answer unless the doc key is checked"
+    },
+    {
+      "id": "stat-disc-002",
+      "question": "How much health does Locke gain per level?",
+      "category": "stats-discrimination",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:locke"
+      ],
+      "expected_answer": "109 per level, on a base of 655. Ekko's document states 99 on the same base, so an answer of 99 means the neighbouring document was retrieved instead.",
+      "collection": "champion_stats",
+      "failure_mode": "near-duplicate stat blocks; a neighbouring champion's document answers plausibly and wrongly, so a miss reads as a correct answer unless the doc key is checked"
+    },
+    {
+      "id": "stat-disc-003",
+      "question": "Who starts with the larger mana pool, Vel'Koz or Xerath?",
+      "category": "stats-discrimination",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:velkoz",
+        "stats:xerath"
+      ],
+      "expected_answer": "Vel'Koz, at 469 to Xerath's 400. The two documents agree on seven of their eleven stat lines, attack range and armor among them.",
+      "collection": "champion_stats",
+      "failure_mode": "near-duplicate stat blocks; a neighbouring champion's document answers plausibly and wrongly, so a miss reads as a correct answer unless the doc key is checked"
+    },
+    {
+      "id": "stat-disc-004",
+      "question": "Which of Janna and Sona starts with more health?",
+      "category": "stats-discrimination",
+      "scoring": "retrieval",
+      "check": "numeric",
+      "expected_doc_keys": [
+        "stats:janna",
+        "stats:sona"
+      ],
+      "expected_answer": "Janna, at 570 to Sona's 550. The two documents share six of their eleven lines, attack range and mana regeneration among them.",
+      "collection": "champion_stats",
+      "failure_mode": "near-duplicate stat blocks; a neighbouring champion's document answers plausibly and wrongly, so a miss reads as a correct answer unless the doc key is checked"
+    },
+    {
       "id": "ref-runtime-001",
       "question": "How long does it take for Teemo's mushrooms to recharge?",
       "category": "refusal-runtime-values",
@@ -1771,7 +1904,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Answerable from champions.faction_slug. Out of scope for v1 dense retrieval.",
-      "collection": null,
+      "collection": "lore",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1782,7 +1915,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Answerable from item_tag. Out of scope for v1.",
-      "collection": null,
+      "collection": "equipment",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1793,7 +1926,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Requires scanning all 173 passives. Out of scope for v1.",
-      "collection": null,
+      "collection": "abilities",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1804,7 +1937,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "A count over champions.faction_slug. Out of scope for v1.",
-      "collection": null,
+      "collection": "lore",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1815,7 +1948,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Answerable from item_components. Out of scope for v1.",
-      "collection": null,
+      "collection": "equipment",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1826,7 +1959,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Answerable from runes.path_id. Out of scope for v1.",
-      "collection": null,
+      "collection": "equipment",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1837,7 +1970,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Requires scanning all 173 ultimates. Out of scope for v1.",
-      "collection": null,
+      "collection": "abilities",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1848,7 +1981,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Answerable from item_tag or item_values. Out of scope for v1.",
-      "collection": null,
+      "collection": "equipment",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1859,7 +1992,7 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Answerable from story_champion. Out of scope for v1.",
-      "collection": null,
+      "collection": "lore",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
     },
     {
@@ -1870,8 +2003,52 @@
       "check": "none",
       "expected_doc_keys": [],
       "expected_answer": "Answerable from the factions table. Out of scope for v1.",
-      "collection": null,
+      "collection": "lore",
       "failure_mode": "answerable by SQL over the association tables, not by dense retrieval; converts on the routing upgrade"
+    },
+    {
+      "id": "limit-level-001",
+      "question": "How much health does Garen have at level 18?",
+      "category": "level-scaling",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "The corpus states 690 at level 1 and a growth figure of 98 per level, never a total. Out of scope for v1.",
+      "collection": "champion_stats",
+      "failure_mode": "the corpus states the per-level growth figure Data Dragon publishes and never a total, so any level-18 number is invented"
+    },
+    {
+      "id": "limit-level-002",
+      "question": "What is Caitlyn's armor at level 18?",
+      "category": "level-scaling",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "The corpus states 27 at level 1 and a growth figure of 4.7 per level, and Riot's growth curve is not a plain multiple of that figure. Out of scope for v1.",
+      "collection": "champion_stats",
+      "failure_mode": "the corpus states the per-level growth figure Data Dragon publishes and never a total, so any level-18 number is invented"
+    },
+    {
+      "id": "limit-level-003",
+      "question": "What is Master Yi's attack speed at level 18?",
+      "category": "level-scaling",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "The corpus states 0.679 at level 1 and a growth figure of 2.5% per level, and Riot's growth curve is not a plain multiple of that figure. Out of scope for v1.",
+      "collection": "champion_stats",
+      "failure_mode": "the corpus states the per-level growth figure Data Dragon publishes and never a total, so any level-18 number is invented"
+    },
+    {
+      "id": "limit-stats-001",
+      "question": "How much effective health does Kled have while riding Skaarl?",
+      "category": "stats-unpublished",
+      "scoring": "limitation",
+      "check": "none",
+      "expected_doc_keys": [],
+      "expected_answer": "Not published. The stats document states 410 at level 1, which is Kled dismounted, and his passive describes Skaarl taking damage for him without ever giving Skaarl's own pool. Out of scope for v1.",
+      "collection": "champion_stats",
+      "failure_mode": "Data Dragon publishes one stat block per champion and no second pool, so a champion with a second health bar is understated and the corpus cannot say by how much"
     }
   ]
 }
