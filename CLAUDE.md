@@ -114,6 +114,11 @@ All corpus content comes from Riot first-party JSON APIs. No scraping.
 - Riot Universe (`universe-meeps.leagueoflegends.com`) — champion biographies,
   faction pages, long-form stories. Enumerate via `search/index.json`; the
   other `*/index.json` hub endpoints return 403.
+- Riot developer static docs (`static.developer.riotgames.com`) — reference
+  tables the game CDNs do not carry. Currently `docs/lol/gameModes.json`, the
+  canonical game-mode enum list: it names the enums Data Dragon publishes raw,
+  and by omission it is the only first-party statement of which tokens are
+  engine scaffolding rather than modes a player can queue into.
 - The LoL wiki is NOT used. Its robots.txt disallows `api.php` for all agents
   and blocks AI crawlers site-wide. Do not reopen this without amending this
   file first, so the repo never claims a principle its code violates.

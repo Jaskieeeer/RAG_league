@@ -8,6 +8,7 @@ from lolrag.config import Settings, get_settings
 from lolrag.db.session import get_session
 from lolrag.fetch.client import FetchClient
 from lolrag.ingest.documents import DocumentLoadStats, load_documents
+from lolrag.ingest.loaders import load_game_mode_names
 from lolrag.ingest.run import IngestReport, run_ingest
 from lolrag.pipeline import RagResponse, answer_question
 
@@ -30,7 +31,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     ingest_parser = subparsers.add_parser(
         "ingest",
-        help="Warm the corpus cache and load every entity and value row into Postgres.",
+        help=(
+            "Warm the corpus cache, load every entity and value row into Postgres, then"
+            " rebuild and re-embed the documents whose content changed."
+        ),
     )
     ingest_parser.add_argument(
         "--refresh",
@@ -69,18 +73,23 @@ async def _ingest(settings: Settings, *, refresh: bool) -> IngestReport:
     return report
 
 
-def _index(settings: Settings) -> DocumentLoadStats:
+async def _index(settings: Settings) -> DocumentLoadStats:
     """Run the document stage alone inside a session that is committed on success.
 
     Args:
-        settings: Application settings providing database_url and
-            embedding_model_name.
+        settings: Application settings providing database_url,
+            embedding_model_name and riot_static_base_url.
 
     Returns:
-        The DocumentLoadStats of the committed run.
+        The DocumentLoadStats of the committed run. The stage otherwise reads
+        only Postgres, but the game-mode names live in no table, so one small
+        Riot document is fetched for them; it comes off the on-disk cache once
+        an ingest has run.
     """
+    async with FetchClient(settings) as client:
+        mode_names = await load_game_mode_names(client, settings)
     with get_session(settings) as session:
-        stats = load_documents(session, settings)
+        stats = load_documents(session, settings, mode_names)
         session.commit()
     return stats
 
@@ -163,10 +172,10 @@ def _run_index(settings: Settings) -> None:
     """Rebuild documents and chunks from the stored entities and print the counts.
 
     Args:
-        settings: Application settings providing database_url and
-            embedding_model_name.
+        settings: Application settings providing database_url,
+            embedding_model_name and riot_static_base_url.
     """
-    stats = _index(settings)
+    stats = asyncio.run(_index(settings))
     _print_document_stats(stats, len("documents changed"))
 
 

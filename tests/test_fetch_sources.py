@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from lolrag.config import get_settings
-from lolrag.fetch import cdragon, cdragon_bin, ddragon, universe
+from lolrag.fetch import cdragon, cdragon_bin, ddragon, riot_static, universe
 from lolrag.fetch.cache import cache_path
 from lolrag.fetch.client import FetchClient
 from tests.test_fetch_client import build_client, build_settings
@@ -191,6 +191,21 @@ async def test_cdragon_item_bin_uses_expected_url_and_cache_path(tmp_path: Path)
 
     assert str(calls[0].url) == "https://cdragon.test/latest/game/items.cdtb.bin.json"
     assert cache_path(tmp_path, "cdragon", "latest", "items.cdtb.bin.json").exists()
+
+
+# ---------- riot static docs ----------
+
+
+async def test_game_modes_use_expected_url_and_cache_path(tmp_path: Path) -> None:
+    """The game-mode list is a single unversioned file cached under its own root."""
+    settings = build_settings(tmp_path)
+    calls: list[httpx.Request] = []
+
+    async with build_client(settings, ok_handler(calls)) as client:
+        await riot_static.fetch_game_modes(client, settings)
+
+    assert str(calls[0].url) == "https://riotstatic.test/docs/lol/gameModes.json"
+    assert cache_path(tmp_path, "riot_static", "gameModes.json").exists()
 
 
 # ---------- universe ----------

@@ -35,11 +35,18 @@ from lolrag.ingest.documents import (
     chunk_document,
     contradicting_copies,
     load_documents,
-    mode_name,
+    named_modes,
     render_value,
 )
+from lolrag.ingest.loaders import CURATED_GAME_MODE_NAMES
 
 DOC_KEY_WIDTH = 160
+
+MODE_NAMES = {
+    "ARAM": "ARAM",
+    "CLASSIC": "Classic Summoner's Rift",
+    "NEXUSBLITZ": "Nexus Blitz",
+}
 
 
 # ---------- value rendering tests ----------
@@ -336,7 +343,7 @@ def test_build_rune_document_drops_a_long_description_that_repeats_the_short_one
 
 
 def summoner_spell(
-    spell_id: str = "SummonerFlash", modes: list[str] | None = None
+    spell_id: str = "SummonerFlash", modes: list[str] | None = None, name: str = "Flash"
 ) -> SummonerSpell:
     """Build a transient summoner spell.
 
@@ -344,6 +351,7 @@ def summoner_spell(
         spell_id: Data Dragon summoner spell id.
         modes: Raw mode enums the spell is published under, defaulting to the
             three-mode set that stands for a spell available nearly everywhere.
+        name: Display name, which is what another spell may collide with.
 
     Returns:
         A SummonerSpell carrying both facts the source publishes about it.
@@ -351,7 +359,7 @@ def summoner_spell(
     return SummonerSpell(
         id=spell_id,
         key="4",
-        name="Flash",
+        name=name,
         description="<br>Teleports.",
         description_text="Teleports.",
         cooldown=300.0,
@@ -362,7 +370,9 @@ def summoner_spell(
 
 def test_build_summoner_spell_document_states_cooldown_and_unlock_level() -> None:
     """Both facts the source publishes reach the document."""
-    document = build_summoner_spell_document(summoner_spell(), name_is_shared=False)
+    document = build_summoner_spell_document(
+        summoner_spell(), name_is_shared=False, mode_names=MODE_NAMES
+    )
 
     assert document.title == "Flash (summoner spell)"
     assert document.doc_key == "summoner_spell:SummonerFlash"
@@ -371,51 +381,123 @@ def test_build_summoner_spell_document_states_cooldown_and_unlock_level() -> Non
 
 
 def test_build_summoner_spell_document_lists_the_modes_in_the_header() -> None:
-    """Every spell carries its modes, whether or not its name is shared."""
-    document = build_summoner_spell_document(summoner_spell(), name_is_shared=False)
+    """Every spell carries its modes by name, whether or not its name is shared."""
+    document = build_summoner_spell_document(
+        summoner_spell(), name_is_shared=False, mode_names=MODE_NAMES
+    )
 
-    assert "Modes: ARAM, CLASSIC, Nexus Blitz" in document.content
+    assert "Modes: ARAM, Classic Summoner's Rift, Nexus Blitz" in document.content
+
+
+def test_build_summoner_spell_document_drops_the_modes_riot_does_not_document() -> None:
+    """Engine scaffolding must never reach a Modes: line the model reads."""
+    spell = summoner_spell(modes=["CLASSIC", "WIPMODEWIP3", "RUBY_TRIAL_1"])
+
+    document = build_summoner_spell_document(spell, name_is_shared=False, mode_names=MODE_NAMES)
+
+    assert "Modes: Classic Summoner's Rift" in document.content
+    assert "WIPMODEWIP3" not in document.content
+    assert "RUBY_TRIAL_1" not in document.content
+
+
+def test_build_summoner_spell_document_omits_the_header_when_no_mode_is_documented() -> None:
+    """A spell Riot documents no mode for states none rather than an empty label."""
+    spell = summoner_spell("SummonerSnowURFSnowball_Mark", modes=["SNOWURF"], name="Mark")
+
+    document = build_summoner_spell_document(spell, name_is_shared=False, mode_names=MODE_NAMES)
+
+    assert "Modes:" not in document.content
 
 
 def test_build_summoner_spell_document_labels_a_shared_name_with_its_only_mode() -> None:
     """A spell that exists in one mode and shares its name is identified by that mode."""
+    spell = summoner_spell("SummonerAramFlash", modes=["ARAM"])
+
+    document = build_summoner_spell_document(spell, name_is_shared=True, mode_names=MODE_NAMES)
+
+    assert document.title == "Flash (ARAM summoner spell)"
+
+
+def test_build_summoner_spell_document_keeps_an_undocumented_enum_in_a_shared_title() -> None:
+    """Riot names SNOWURF nowhere, and two spells titled "Mark" would be worse."""
+    spell = summoner_spell("SummonerSnowURFSnowball_Mark", modes=["SNOWURF"], name="Mark")
+
+    document = build_summoner_spell_document(spell, name_is_shared=True, mode_names=MODE_NAMES)
+
+    assert document.title == "Mark (SNOWURF summoner spell)"
+
+
+def test_build_summoner_spell_document_titles_the_arena_flash_with_the_curated_name() -> None:
+    """CHERRY is curated as Arena, so the second Flash is titled by a name, not by an enum."""
     spell = summoner_spell("SummonerCherryFlash", modes=["CHERRY"])
 
-    document = build_summoner_spell_document(spell, name_is_shared=True)
+    document = build_summoner_spell_document(
+        spell, name_is_shared=True, mode_names=MODE_NAMES | CURATED_GAME_MODE_NAMES
+    )
 
-    assert document.title == "Flash (CHERRY summoner spell)"
+    assert document.title == "Flash (Arena summoner spell)"
+    assert "Modes: Arena" in document.content
 
 
 def test_build_summoner_spell_document_leaves_a_many_mode_title_alone() -> None:
     """A shared name on a spell available nearly everywhere would only bloat the title."""
-    document = build_summoner_spell_document(summoner_spell(), name_is_shared=True)
+    document = build_summoner_spell_document(
+        summoner_spell(), name_is_shared=True, mode_names=MODE_NAMES
+    )
 
     assert document.title == "Flash (summoner spell)"
 
 
-def test_mode_name_renders_an_unproven_enum_raw() -> None:
-    """No permitted source names CHERRY, so the corpus states the enum rather than a guess."""
-    assert mode_name("CHERRY") == "CHERRY"
-    assert mode_name("NEXUSBLITZ") == "Nexus Blitz"
+def test_named_modes_drops_every_enum_the_mapping_does_not_name() -> None:
+    """The mapping is the whole set of real modes, so a token missing from it is scaffolding."""
+    assert named_modes(["CLASSIC", "SNOWURF", "NEXUSBLITZ"], MODE_NAMES) == [
+        "Classic Summoner's Rift",
+        "Nexus Blitz",
+    ]
+    assert named_modes(["WIPMODEWIP3", "TUTORIAL_MODULE_2"], MODE_NAMES) == []
 
 
-def champion_stats(champion_row: Champion | None = None) -> ChampionStats:
+def test_named_modes_renders_the_curated_arena_name() -> None:
+    """A curated entry is looked up exactly like a documented one."""
+    assert named_modes(["CHERRY"], MODE_NAMES | CURATED_GAME_MODE_NAMES) == ["Arena"]
+
+
+def champion_stats(
+    champion_row: Champion | None = None,
+    *,
+    partype: str = "Blood Well",
+    mp: float = 0.0,
+    mp_per_level: float = 0.0,
+    mp_regen: float = 0.0,
+    mp_regen_per_level: float = 0.0,
+) -> ChampionStats:
     """Build a transient champion stats row.
 
     Args:
         champion_row: Champion to attach, or None to leave the relationship
             unset so the row can be persisted against a champion already stored.
+        partype: Name of the primary resource, defaulting to Aatrox's own.
+        mp: Base primary resource value.
+        mp_per_level: Published primary resource growth per level.
+        mp_regen: Base primary resource regeneration.
+        mp_regen_per_level: Published regeneration growth per level.
 
     Returns:
         A ChampionStats carrying Aatrox's published numbers, including the two
-        stats the source gives no per-level figure for.
+        stats the source gives no per-level figure for. Only the resource
+        columns are parameterised, because they are the ones whose rendering
+        depends on another column. attack_damage_per_level deliberately carries
+        a non-zero figure the real source never publishes, so a test that the
+        document omits it proves the column is dropped outright rather than
+        filtered for being zero.
     """
     row = ChampionStats(
         champion_slug="aatrox",
+        partype=partype,
         hp=650.0,
         hp_per_level=114.0,
-        mp=0.0,
-        mp_per_level=0.0,
+        mp=mp,
+        mp_per_level=mp_per_level,
         move_speed=345.0,
         armor=38.0,
         armor_per_level=4.8,
@@ -424,8 +506,8 @@ def champion_stats(champion_row: Champion | None = None) -> ChampionStats:
         attack_range=175.0,
         hp_regen=3.0,
         hp_regen_per_level=0.5,
-        mp_regen=0.0,
-        mp_regen_per_level=0.0,
+        mp_regen=mp_regen,
+        mp_regen_per_level=mp_regen_per_level,
         crit=0.0,
         crit_per_level=0.0,
         attack_damage=60.0,
@@ -454,8 +536,23 @@ def test_build_champion_stats_document_states_growth_without_inventing_a_total()
     content = build_champion_stats_document(champion_stats(champion())).content
 
     assert "Health: 650 at level 1, growth 114 per level" in content
-    assert "Attack speed: 0.651 at level 1, growth 2.5 per level" in content
     assert "level 18" not in content
+
+
+def test_build_champion_stats_document_marks_attack_speed_growth_as_a_percentage() -> None:
+    """The base is a ratio and the growth a percentage of it, so 2.5 must not read as 2.5x."""
+    content = build_champion_stats_document(champion_stats(champion())).content
+
+    assert "Attack speed: 0.651 at level 1, growth 2.5% per level" in content
+
+
+def test_build_champion_stats_document_drops_the_false_attack_damage_growth() -> None:
+    """Riot publishes 0 for all 173 champions, which is false, so no figure is stated at all."""
+    content = build_champion_stats_document(champion_stats(champion())).content
+
+    assert "Attack damage: 60" in content
+    assert "Attack damage: 60 at level 1" not in content
+    assert "growth 5 per level" not in content
 
 
 def test_build_champion_stats_document_omits_growth_the_source_does_not_publish() -> None:
@@ -467,13 +564,54 @@ def test_build_champion_stats_document_omits_growth_the_source_does_not_publish(
     assert "Movement speed: 345 at level 1" not in content
 
 
-def test_build_champion_stats_document_carries_every_published_field() -> None:
-    """All twenty source fields reach the document, not a chosen subset."""
-    content = build_champion_stats_document(champion_stats(champion())).content
+def test_build_champion_stats_document_names_the_resource_it_states_a_value_for() -> None:
+    """Kled's Courage and Renekton's Fury are not the same anonymous "Primary resource: 100"."""
+    content = build_champion_stats_document(
+        champion_stats(champion(), partype="Mana", mp=315.0, mp_per_level=40.0, mp_regen=7.4)
+    ).content
+
+    assert "Mana: 315 at level 1, growth 40 per level" in content
+    assert "Mana regeneration: 7.4 at level 1, growth 0 per level" in content
+    assert "Primary resource" not in content
+
+
+def test_build_champion_stats_document_states_no_resource_and_hides_the_sentinel_mp() -> None:
+    """partype is authoritative, so Viego's mp of 10000 is a sentinel no line may state."""
+    content = build_champion_stats_document(
+        champion_stats(champion(), partype="None", mp=10000.0)
+    ).content
+
+    assert "No resource" in content
+    assert "10000" not in content
+    assert "regeneration" in content
+    assert "resource regeneration" not in content
+
+
+def test_build_champion_stats_document_treats_an_empty_partype_as_no_resource() -> None:
+    """Belveth's partype is the empty string, which says the same thing as "None"."""
+    content = build_champion_stats_document(champion_stats(champion(), partype="", mp=60.0)).content
+
+    assert "No resource" in content
+    assert "60 at level 1" not in content
+
+
+def test_build_champion_stats_document_states_a_named_resource_with_no_maximum() -> None:
+    """Blood Well, Fury and Grit accumulate uncapped, so "Grit: 0" would assert a false maximum."""
+    content = build_champion_stats_document(champion_stats(champion(), partype="Grit")).content
+
+    assert "Grit: Data Dragon publishes no maximum" in content
+    assert "Grit: 0" not in content
+
+
+def test_build_champion_stats_document_carries_one_line_per_rendered_stat() -> None:
+    """Nine fixed stat lines plus the resource block, with growth only where it is published."""
+    content = build_champion_stats_document(
+        champion_stats(champion(), partype="Mana", mp=315.0, mp_per_level=40.0, mp_regen=7.4)
+    ).content
     stat_lines = [line for line in content.splitlines() if ": " in line and "Champion:" not in line]
 
     assert len(stat_lines) == 11
-    assert sum(line.count("growth") for line in stat_lines) == 9
+    assert sum(line.count("growth") for line in stat_lines) == 8
 
 
 def test_build_champion_document_leads_with_name_and_title() -> None:
@@ -650,7 +788,7 @@ def test_load_documents_writes_a_document_and_its_chunks(db_session: Session) ->
     """One run lands every seeded entity as a document with at least one chunk."""
     seed_entities(db_session)
 
-    stats = load_documents(db_session, get_settings())
+    stats = load_documents(db_session, get_settings(), MODE_NAMES)
 
     assert stats.documents_built == SEEDED_DOCUMENTS
     assert stats.documents_changed == SEEDED_DOCUMENTS
@@ -670,9 +808,9 @@ def test_load_documents_writes_a_document_and_its_chunks(db_session: Session) ->
 def test_load_documents_run_twice_changes_nothing_and_embeds_nothing(db_session: Session) -> None:
     """The conditional upsert is the whole point: an unchanged corpus costs zero embeddings."""
     seed_entities(db_session)
-    load_documents(db_session, get_settings())
+    load_documents(db_session, get_settings(), MODE_NAMES)
 
-    second = load_documents(db_session, get_settings())
+    second = load_documents(db_session, get_settings(), MODE_NAMES)
 
     assert second.documents_built == SEEDED_DOCUMENTS
     assert second.documents_changed == 0
@@ -685,13 +823,13 @@ def test_load_documents_re_embeds_only_the_document_whose_content_changed(
 ) -> None:
     """A single edited entity must not drag the rest of the corpus through the model again."""
     seed_entities(db_session)
-    load_documents(db_session, get_settings())
+    load_documents(db_session, get_settings(), MODE_NAMES)
     faction = db_session.get(Faction, "noxus")
     assert faction is not None
     faction.overview_text = "An empire that rewrote itself."
     db_session.flush()
 
-    stats = load_documents(db_session, get_settings())
+    stats = load_documents(db_session, get_settings(), MODE_NAMES)
 
     assert stats.documents_changed == 1
     assert stats.chunks_written == 1

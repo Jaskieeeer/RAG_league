@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 
 from lolrag.config import Settings
-from lolrag.fetch import cdragon, cdragon_bin, ddragon, universe
+from lolrag.fetch import cdragon, cdragon_bin, ddragon, riot_static, universe
 from lolrag.fetch.client import FetchClient
 
 logger = logging.getLogger(__name__)
@@ -23,6 +23,8 @@ class CorpusCacheStats:
         universe_champions: Number of Universe champion payloads fetched.
         universe_factions: Number of Universe faction payloads fetched.
         universe_stories: Number of distinct Universe stories fetched.
+        riot_game_modes: Number of Riot game-mode list files fetched, 1 once the
+            single file is present.
         cache_hits: Requests served from the on-disk cache.
         cache_misses: Requests that went to the network.
     """
@@ -34,6 +36,7 @@ class CorpusCacheStats:
     universe_champions: int
     universe_factions: int
     universe_stories: int
+    riot_game_modes: int
     cache_hits: int
     cache_misses: int
 
@@ -43,7 +46,7 @@ async def warm_cache(settings: Settings, *, refresh: bool = False) -> CorpusCach
 
     Args:
         settings: Application settings providing every ddragon_*, cdragon_*,
-            universe_* and http_* value plus cache_dir.
+            universe_*, riot_static_* and http_* value plus cache_dir.
         refresh: If True, refetch and overwrite every cache entry instead of
             reusing existing ones.
 
@@ -99,6 +102,9 @@ async def warm_cache(settings: Settings, *, refresh: bool = False) -> CorpusCach
         await universe.fetch_all_stories(client, settings, story_slugs)
         logger.info("fetched %d Universe stories", len(story_slugs))
 
+        await riot_static.fetch_game_modes(client, settings)
+        logger.info("fetched the Riot game-mode list")
+
         return CorpusCacheStats(
             ddragon_champions=len(champion_ids),
             cdragon_champions=len(champion_keys),
@@ -107,6 +113,7 @@ async def warm_cache(settings: Settings, *, refresh: bool = False) -> CorpusCach
             universe_champions=len(champion_slugs),
             universe_factions=len(faction_slugs),
             universe_stories=len(story_slugs),
+            riot_game_modes=1,
             cache_hits=client.hits,
             cache_misses=client.misses,
         )

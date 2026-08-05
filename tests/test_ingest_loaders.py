@@ -31,6 +31,7 @@ from lolrag.ingest.associations import AssociationStats
 from lolrag.ingest.identifiers import universe_slug
 from lolrag.ingest.loaders import (
     CDRAGON_VARIANT_OF_FIELD,
+    CURATED_GAME_MODE_NAMES,
     UNAFFILIATED_SLUG,
     LoadStats,
     build_abilities,
@@ -42,9 +43,11 @@ from lolrag.ingest.loaders import (
     build_rune_paths,
     build_stories,
     build_summoner_spells,
+    game_mode_names,
     item_display_name_ids,
     item_variant_ids,
     load_all,
+    load_game_mode_names,
     parse_release_date,
 )
 from lolrag.ingest.markup import clean_markup
@@ -111,7 +114,9 @@ def ddragon_champion_list() -> dict[str, Any]:
 
     Returns:
         Payload whose "data" key maps champion id to a summary carrying the
-        numeric key, the role tags and the base stats block.
+        numeric key, the role tags, the primary resource name and the base stats
+        block. The two champions carry different resource names, so a row that
+        read the wrong summary would be visible.
     """
     return {
         "data": {
@@ -120,6 +125,7 @@ def ddragon_champion_list() -> dict[str, Any]:
                 "key": "266",
                 "name": "Aatrox",
                 "tags": ["Fighter"],
+                "partype": "Blood Well",
                 "stats": ddragon_champion_stats(650),
             },
             "Renata": {
@@ -127,6 +133,7 @@ def ddragon_champion_list() -> dict[str, Any]:
                 "key": "888",
                 "name": "Renata Glasc",
                 "tags": ["Support", "Mage"],
+                "partype": "Mana",
                 "stats": ddragon_champion_stats(544),
             },
         }
@@ -473,6 +480,24 @@ def ddragon_summoner_spells() -> dict[str, Any]:
     }
 
 
+def riot_game_modes() -> list[dict[str, Any]]:
+    """Build a gameModes.json body covering every description shape Riot publishes.
+
+    Returns:
+        Records for five modes: three whose description ends in a lowercase
+        " games", one ending in a capitalised " Games" and one carrying no
+        suffix at all. CHERRY and the WIPMODEWIP tokens Data Dragon lists on its
+        spells are absent, which is exactly what the real list says about them.
+    """
+    return [
+        {"gameMode": "CLASSIC", "description": "Classic Summoner's Rift games"},
+        {"gameMode": "ARAM", "description": "ARAM games"},
+        {"gameMode": "NEXUSBLITZ", "description": "Nexus Blitz games"},
+        {"gameMode": "SWIFTPLAY", "description": "Swiftplay Games"},
+        {"gameMode": "BRAWL", "description": "Brawl"},
+    ]
+
+
 # ---------- builder tests ----------
 
 
@@ -807,6 +832,58 @@ def test_build_summoner_spells_sorts_and_deduplicates_the_modes() -> None:
     assert spells["SummonerCherryFlash"].modes == ["CHERRY"]
 
 
+def test_game_mode_names_strips_the_suffix_riots_descriptions_repeat() -> None:
+    """The description is the mode name once the trailing " games" is gone, in either case."""
+    names = game_mode_names(riot_game_modes())
+
+    assert names["ARAM"] == "ARAM"
+    assert names["NEXUSBLITZ"] == "Nexus Blitz"
+    assert names["CLASSIC"] == "Classic Summoner's Rift"
+    assert names["SWIFTPLAY"] == "Swiftplay"
+    assert names["BRAWL"] == "Brawl"
+
+
+def test_game_mode_names_carries_riots_enums_and_the_curated_ones() -> None:
+    """Riot's list plus the curated entries is the whole set; the rest stays scaffolding."""
+    assert set(game_mode_names(riot_game_modes())) == {
+        "ARAM",
+        "BRAWL",
+        "CHERRY",
+        "CLASSIC",
+        "NEXUSBLITZ",
+        "SWIFTPLAY",
+    }
+
+
+def test_game_mode_names_curates_the_name_riot_documents_nowhere_for_arena() -> None:
+    """Arena is a mode players queue into, so it is named rather than dropped as scaffolding."""
+    names = game_mode_names(riot_game_modes())
+
+    assert names["CHERRY"] == "Arena"
+    assert CURATED_GAME_MODE_NAMES == {"CHERRY": "Arena"}
+
+
+def test_game_mode_names_curates_nothing_else() -> None:
+    """The override is one inference, not a licence to name every undocumented token."""
+    names = game_mode_names(riot_game_modes())
+
+    assert "SNOWURF" not in names
+    assert "WIPMODEWIP3" not in names
+
+
+async def test_load_game_mode_names_reduces_riots_list_to_a_lookup(tmp_path: Path) -> None:
+    """The loader fetches the published list and hands back the enum-to-name mapping."""
+    settings = build_settings(tmp_path)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=riot_game_modes())
+
+    async with build_client(settings, handler) as client:
+        names = await load_game_mode_names(client, settings)
+
+    assert names == game_mode_names(riot_game_modes())
+
+
 def test_build_champion_stats_reads_every_published_field() -> None:
     """All twenty fields reach the row, bases and per-level figures alike."""
     rows = {row.champion_slug: row for row in build_champion_stats(ddragon_champion_list(), ROSTER)}
@@ -818,6 +895,14 @@ def test_build_champion_stats_reads_every_published_field() -> None:
     assert aatrox.attack_speed_per_level == 2.5
     assert aatrox.spell_block_per_level == 2.05
     assert aatrox.move_speed == 345
+
+
+def test_build_champion_stats_reads_partype_from_the_champion_summary() -> None:
+    """partype sits beside the stats block, not inside it, and names the resource per champion."""
+    rows = {row.champion_slug: row for row in build_champion_stats(ddragon_champion_list(), ROSTER)}
+
+    assert rows["aatrox"].partype == "Blood Well"
+    assert rows["renataglasc"].partype == "Mana"
 
 
 def test_build_champion_stats_keys_rows_on_the_universe_slug() -> None:

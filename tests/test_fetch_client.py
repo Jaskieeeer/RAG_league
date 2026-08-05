@@ -30,6 +30,7 @@ def build_settings(cache_dir: Path, **overrides: Any) -> Settings:
         "ddragon_base_url": "https://ddragon.test",
         "cdragon_base_url": "https://cdragon.test",
         "universe_base_url": "https://universe.test/v1/en_us",
+        "riot_static_base_url": "https://riotstatic.test",
         "cache_dir": str(cache_dir),
         "http_delay_seconds": 0.0,
         "http_timeout_seconds": 1.0,

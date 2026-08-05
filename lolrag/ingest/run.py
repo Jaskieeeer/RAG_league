@@ -7,7 +7,7 @@ from lolrag.config import Settings
 from lolrag.fetch.client import FetchClient
 from lolrag.fetch.corpus import CorpusCacheStats, warm_cache
 from lolrag.ingest.documents import DocumentLoadStats, load_documents
-from lolrag.ingest.loaders import LoadStats, load_all
+from lolrag.ingest.loaders import LoadStats, load_all, load_game_mode_names
 from lolrag.ingest.values import ValueLoadStats, load_values
 
 logger = logging.getLogger(__name__)
@@ -46,7 +46,7 @@ async def run_ingest(
             cache-warming stage opens its own client internally, so this one
             serves the two load stages alone.
         settings: Application settings providing every ddragon_*, cdragon_*,
-            universe_* and http_* value plus cache_dir.
+            universe_*, riot_static_* and http_* value plus cache_dir.
         refresh: If True, refetch and overwrite every cache entry instead of
             reusing existing ones.
 
@@ -54,6 +54,8 @@ async def run_ingest(
         IngestReport composing the stats of all four stages. The document stage
         runs last because it reads the entity and value rows the earlier stages
         wrote, and it embeds only the documents whose content actually changed.
+        The game-mode names it renders summoner spell modes with are fetched
+        here rather than stored, no entity in the schema referring to a mode.
 
     Raises:
         httpx.HTTPStatusError: If any request fails after its retries.
@@ -64,7 +66,8 @@ async def run_ingest(
     cache = await warm_cache(settings, refresh=refresh)
     entities = await load_all(session, client, settings)
     values = await load_values(session, client, settings)
-    documents = load_documents(session, settings)
+    mode_names = await load_game_mode_names(client, settings)
+    documents = load_documents(session, settings, mode_names)
     report = IngestReport(cache=cache, entities=entities, values=values, documents=documents)
     logger.info("ingest complete: %s", report)
     return report

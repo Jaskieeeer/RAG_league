@@ -13,6 +13,8 @@ class Settings(BaseSettings):
         ddragon_base_url: Data Dragon CDN root URL.
         cdragon_base_url: Community Dragon raw asset root URL.
         universe_base_url: Riot Universe JSON API root URL, including locale segment.
+        riot_static_base_url: Riot developer static documentation root URL,
+            serving the reference tables the game CDNs do not carry.
         cache_dir: Filesystem path for the on-disk raw response cache.
         http_user_agent: User-Agent header sent with every corpus fetch.
         http_concurrency: Maximum number of in-flight corpus requests.
@@ -48,6 +50,7 @@ class Settings(BaseSettings):
     ddragon_base_url: str = "https://ddragon.leagueoflegends.com"
     cdragon_base_url: str = "https://raw.communitydragon.org"
     universe_base_url: str = "https://universe-meeps.leagueoflegends.com/v1/en_us"
+    riot_static_base_url: str = "https://static.developer.riotgames.com"
 
     cache_dir: str = "./data/cache"
     http_user_agent: str = "lolrag/0.1 (+https://github.com/Jaskieeeer)"

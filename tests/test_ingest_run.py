@@ -22,6 +22,7 @@ from lolrag.db.models import (
 from lolrag.fetch.client import FetchClient
 from lolrag.ingest.documents import ENTITY_COLUMNS, load_documents
 from lolrag.ingest.identifiers import PASSIVE_SLOT
+from lolrag.ingest.loaders import load_game_mode_names
 from lolrag.ingest.run import run_ingest
 
 CACHE_DIR = Path(get_settings().cache_dir)
@@ -256,12 +257,13 @@ async def test_run_ingest_re_embeds_nothing_when_the_documents_are_unchanged(
     settings = get_settings()
     async with FetchClient(settings) as client:
         report = await run_ingest(db_session, client, settings)
+        mode_names = await load_game_mode_names(client, settings)
 
     assert report.documents.documents_built == EXPECTED_COUNTS["documents"]
     assert report.documents.documents_changed == EXPECTED_COUNTS["documents"]
     assert report.documents.chunks_written == EXPECTED_COUNTS["chunks"]
 
-    second = load_documents(db_session, settings)
+    second = load_documents(db_session, settings, mode_names)
 
     assert second.documents_built == EXPECTED_COUNTS["documents"]
     assert second.documents_changed == 0

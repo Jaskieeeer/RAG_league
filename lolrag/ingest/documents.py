@@ -12,19 +12,25 @@ wrong, so it must never be used alone. The names are frozen here as a module
 constant because they are seven strings that change on the timescale of years,
 and fetching them would add two endpoints to every ingest for no new fact.
 
-MODE_NAMES is deliberately almost empty. Data Dragon publishes each summoner
-spell's game modes as raw engine enums and publishes no table naming them, so
-an enum is renamed here only when a first-party string already proves the name:
-NEXUSBLITZ is the same token sequence as the Data Dragon map name for map 21,
-which MAP_NAMES already carries. Every other enum, CHERRY and ULTBOOK among
-them, renders raw. Naming those would mean importing knowledge no permitted
-source published, and a wrong mode name in a frozen corpus is worse than an
-ugly one.
+Game-mode enums are named from Riot's own gameModes.json, handed in rather than
+frozen here. Data Dragon publishes each summoner spell's modes as raw engine
+enums and names none of them; Riot's developer documentation names the modes it
+documents and, by omitting the rest, is also the only first-party statement of
+which tokens are engine scaffolding. An enum that list omits is dropped from the
+rendered modes rather than passed through, because WIPMODEWIP3 and
+TUTORIAL_MODULE_2 are not modes anyone can queue into and a corpus that lists
+them invites answers about modes that do not exist. The one place an undocumented
+enum survives is the title of a spell that shares its name and exists in exactly
+one mode: dropping it there would leave the two Marks titled identically and
+contradicting each other, which is worse than an ugly title. CHERRY is no longer
+one of those cases, the mode naming it is handed carrying a curated entry that
+names it Arena; the reasoning for that entry sits with the mapping that holds
+it, in the loaders module.
 """
 
 import logging
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from itertools import combinations
@@ -72,14 +78,10 @@ MAP_NAMES = {
     35: "The Bandlewood",
 }
 
-MODE_NAMES = {"NEXUSBLITZ": "Nexus Blitz"}
-
 CHAMPION_STAT_LINES = (
     ("Health", "hp", "hp_per_level"),
     ("Health regeneration", "hp_regen", "hp_regen_per_level"),
-    ("Primary resource", "mp", "mp_per_level"),
-    ("Primary resource regeneration", "mp_regen", "mp_regen_per_level"),
-    ("Attack damage", "attack_damage", "attack_damage_per_level"),
+    ("Attack damage", "attack_damage", None),
     ("Attack speed", "attack_speed", "attack_speed_per_level"),
     ("Attack range", "attack_range", None),
     ("Armor", "armor", "armor_per_level"),
@@ -87,6 +89,14 @@ CHAMPION_STAT_LINES = (
     ("Movement speed", "move_speed", None),
     ("Critical strike chance", "crit", "crit_per_level"),
 )
+
+PERCENT_GROWTH_COLUMNS = frozenset({"attack_speed_per_level"})
+PERCENT_SUFFIX = "%"
+
+NO_RESOURCE_PARTYPES = frozenset({"None", ""})
+NO_RESOURCE_LINE = "No resource"
+NO_PUBLISHED_MAXIMUM = "Data Dragon publishes no maximum"
+RESOURCE_REGENERATION_SUFFIX = " regeneration"
 
 STATS_PREAMBLE = (
     "Base values are at level 1; each growth figure is the per-level number"
@@ -441,39 +451,51 @@ def build_rune_document(rune: Rune) -> BuiltDocument:
     )
 
 
-def mode_name(mode: str) -> str:
-    """Render one raw game-mode enum as the name a first-party source proves.
+def named_modes(modes: Sequence[str], mode_names: Mapping[str, str]) -> list[str]:
+    """Render a spell's raw game-mode enums as the names Riot documents for them.
 
     Args:
-        mode: Raw enum string as Data Dragon publishes it, e.g. CLASSIC.
+        modes: Raw enum strings as stored on the spell, in stored order.
+        mode_names: Mapping of game-mode enum to readable name, as built from
+            Riot's gameModes.json.
 
     Returns:
-        The readable name when MODE_NAMES carries one, and the raw enum
-        otherwise. An unnamed enum is never guessed at from its spelling: the
-        corpus would then assert a mode name no source published.
+        The name of every enum the mapping carries, in the given order. An enum
+        the mapping omits yields nothing at all: Riot's list is the whole set of
+        modes it documents, so a token missing from it is engine scaffolding no
+        player can queue into, and inventing a name from its spelling would state
+        a mode no source published.
     """
-    return MODE_NAMES.get(mode, mode)
+    return [mode_names[mode] for mode in modes if mode in mode_names]
 
 
-def build_summoner_spell_document(spell: SummonerSpell, *, name_is_shared: bool) -> BuiltDocument:
+def build_summoner_spell_document(
+    spell: SummonerSpell, *, name_is_shared: bool, mode_names: Mapping[str, str]
+) -> BuiltDocument:
     """Build the document for one summoner spell.
 
     Args:
         spell: Stored SummonerSpell.
         name_is_shared: Whether another summoner spell carries the same name, in
             which case the title needs more than the name to identify the spell.
+        mode_names: Mapping of game-mode enum to the name Riot documents for it.
 
     Returns:
-        A BuiltDocument in the equipment collection. The header always carries
-        the spell's modes; the title carries one only when the name is shared
-        and the spell exists in exactly one mode, which is what separates the
-        two Flashes and the two Marks without expanding Ignite's title into a
-        dozen modes it shares with everything else. The cooldown and unlock
-        level lines are omitted when the source publishes neither.
+        A BuiltDocument in the equipment collection. The header carries the
+        spell's documented modes and is omitted entirely for a spell every one
+        of whose modes Riot omits. The title carries a mode only when the name
+        is shared and the spell exists in exactly one mode, which is what
+        separates the two Flashes and the two Marks without expanding Ignite's
+        title into a dozen modes it shares with everything else; that one mode
+        falls back to its raw enum when the mapping names none for it, since the
+        alternative is two spells with one title and contradicting cooldowns.
+        The cooldown and unlock level lines are omitted when the source
+        publishes neither.
     """
-    modes = [mode_name(mode) for mode in spell.modes]
-    if name_is_shared and len(modes) == 1:
-        title = f"{spell.name} ({modes[0]} {SUMMONER_SPELL_KIND})"
+    modes = named_modes(spell.modes, mode_names)
+    if name_is_shared and len(spell.modes) == 1:
+        only_mode = spell.modes[0]
+        title = f"{spell.name} ({mode_names.get(only_mode, only_mode)} {SUMMONER_SPELL_KIND})"
     else:
         title = f"{spell.name} ({SUMMONER_SPELL_KIND})"
     header = [title]
@@ -529,6 +551,64 @@ def build_champion_document(champion: Champion) -> BuiltDocument:
     )
 
 
+def _stat_line(label: str, base: float, growth: float | None, growth_suffix: str = "") -> str:
+    """Render one champion statistic as a document line.
+
+    Args:
+        label: Name the line states the statistic under.
+        base: The level-1 value.
+        growth: The per-level figure the source publishes, or None when it
+            publishes none for this statistic.
+        growth_suffix: Unit written after the growth figure, empty for the
+            statistics whose growth is a bare number.
+
+    Returns:
+        "{label}: {base}" when there is no growth figure, otherwise that value
+        stated as the level-1 one followed by the published per-level figure.
+        The suffix is written rather than applied: attack speed growth is a
+        percentage of the base ratio, so 2.5 means 2.5% and multiplying it out
+        would state a number the source never published.
+    """
+    if growth is None:
+        return f"{label}: {_format_number(base)}"
+    return (
+        f"{label}: {_format_number(base)} at level {MIN_CHARACTER_LEVEL},"
+        f" growth {_format_number(growth)}{growth_suffix} per level"
+    )
+
+
+def _resource_lines(stats: ChampionStats) -> list[str]:
+    """Render the champion's primary resource under the name the source gives it.
+
+    Args:
+        stats: Stored ChampionStats carrying partype and the mp columns.
+
+    Returns:
+        The resource lines, which partype decides the shape of. It is the only
+        authority on whether a resource exists at all: the champions it calls
+        "None" or leaves empty carry an mp the engine never spends, 10000 for
+        Viego and 60 for Belveth, so they state that they have no resource and
+        their mp and regeneration are dropped rather than rendered as facts. A
+        named resource with no published maximum, which is Aatrox's Blood Well,
+        Briar's Fury and Sett's Grit, says so instead of rendering its 0, which
+        would assert a maximum of zero. Every other named resource is stated by
+        name with its value, so "Primary resource: 100" is no longer the same
+        anonymous line for Kled's Courage and Renekton's Fury.
+    """
+    if stats.partype in NO_RESOURCE_PARTYPES:
+        return [NO_RESOURCE_LINE]
+    if stats.mp == 0:
+        return [f"{stats.partype}: {NO_PUBLISHED_MAXIMUM}"]
+    return [
+        _stat_line(stats.partype, stats.mp, stats.mp_per_level),
+        _stat_line(
+            f"{stats.partype}{RESOURCE_REGENERATION_SUFFIX}",
+            stats.mp_regen,
+            stats.mp_regen_per_level,
+        ),
+    ]
+
+
 def build_champion_stats_document(stats: ChampionStats) -> BuiltDocument:
     """Build the base statistics document for one playable champion.
 
@@ -538,25 +618,30 @@ def build_champion_stats_document(stats: ChampionStats) -> BuiltDocument:
     Returns:
         A BuiltDocument in the champion_stats collection, headed by the
         champion's name and title so a chunk of bare numbers is still
-        attributable, then one line per stat. A stat with a per-level figure
-        states the base as the level-1 value and the growth as the number the
-        source publishes, never as a level-18 total: Riot's growth curve is not
-        a plain multiple of the published figure, so a rendered total would be a
-        number no source published. This is a separate document from the
-        champion's biography on purpose; a numeric block inside that prose would
-        degrade lore retrieval.
+        attributable, then one line per stat and the resource block last. A stat
+        with a per-level figure states the base as the level-1 value and the
+        growth as the number the source publishes, never as a level-18 total:
+        Riot's growth curve is not a plain multiple of the published figure, so
+        a rendered total would be a number no source published. Attack damage
+        carries no growth line at all, the source publishing 0 for all 173
+        champions when they demonstrably do gain attack damage per level, and a
+        grounded "0" would be misinformation under a first-party citation. This
+        is a separate document from the champion's biography on purpose; a
+        numeric block inside that prose would degrade lore retrieval.
     """
     champion = stats.champion
     title = f"{champion.name} base statistics"
     header = [title, f"Champion: {champion.name}, {champion.title}", STATS_PREAMBLE]
-    lines: list[str] = []
-    for label, base_column, growth_column in CHAMPION_STAT_LINES:
-        base = _format_number(getattr(stats, base_column))
-        if growth_column is None:
-            lines.append(f"{label}: {base}")
-            continue
-        growth = _format_number(getattr(stats, growth_column))
-        lines.append(f"{label}: {base} at level 1, growth {growth} per level")
+    lines = [
+        _stat_line(
+            label,
+            getattr(stats, base_column),
+            None if growth_column is None else getattr(stats, growth_column),
+            PERCENT_SUFFIX if growth_column in PERCENT_GROWTH_COLUMNS else "",
+        )
+        for label, base_column, growth_column in CHAMPION_STAT_LINES
+    ]
+    lines.extend(_resource_lines(stats))
     content = _join_blocks([LINE_SEPARATOR.join(header), LINE_SEPARATOR.join(lines)])
     return BuiltDocument(
         doc_key=f"stats:{stats.champion_slug}",
@@ -692,12 +777,15 @@ def contradicting_copies(items: Sequence[Item], maps_by_item: dict[str, list]) -
     return dropped
 
 
-def build_documents(session: Session) -> list[BuiltDocument]:
+def build_documents(session: Session, mode_names: Mapping[str, str]) -> list[BuiltDocument]:
     """Build one document for every entity that carries retrievable prose.
 
     Args:
         session: Open Session the entities are read through. The entity and
             value loaders must have run first.
+        mode_names: Mapping of game-mode enum to the name Riot documents for it,
+            as load_game_mode_names builds it. Summoner spell modes Riot does
+            not document are dropped rather than rendered raw.
 
     Returns:
         One BuiltDocument per ability, purchasable item, rune, summoner spell,
@@ -769,6 +857,15 @@ def build_documents(session: Session) -> list[BuiltDocument]:
     factions = session.execute(select(Faction).order_by(Faction.slug)).scalars().all()
 
     spell_names = Counter(spell.name for spell in spells)
+    undocumented = sorted(
+        {mode for spell in spells for mode in spell.modes if mode not in mode_names}
+    )
+    if undocumented:
+        logger.info(
+            "dropping %d game-mode enums Riot documents nowhere: %s",
+            len(undocumented),
+            LIST_SEPARATOR.join(undocumented),
+        )
     documents = [
         *(build_ability_document(ability) for ability in abilities),
         *(
@@ -779,7 +876,9 @@ def build_documents(session: Session) -> list[BuiltDocument]:
         ),
         *(build_rune_document(rune) for rune in runes),
         *(
-            build_summoner_spell_document(spell, name_is_shared=spell_names[spell.name] > 1)
+            build_summoner_spell_document(
+                spell, name_is_shared=spell_names[spell.name] > 1, mode_names=mode_names
+            )
             for spell in spells
         ),
         *(build_champion_document(champion) for champion in champions),
@@ -900,12 +999,15 @@ def _upsert_documents(session: Session, documents: Sequence[BuiltDocument]) -> l
 
 
 def _write_chunks(session: Session, document_ids: Sequence[int], settings: Settings) -> int:
-    """Re-chunk and re-embed the given documents, replacing their stored chunks.
+    """Chunk and embed the given documents, inserting one row per chunk.
 
     Args:
         session: Open Session the statements are executed on. Changes are
             flushed but never committed.
-        document_ids: Ids of the documents to rebuild chunks for.
+        document_ids: Ids of the documents to chunk. Nothing here deletes the
+            chunk rows they may already have; load_documents owns that DELETE
+            and runs it first, so calling this on its own for a document that
+            still has chunks would insert a second set beside them.
         settings: Application settings providing embedding_model_name.
 
     Returns:
@@ -963,7 +1065,9 @@ class DocumentLoadStats:
     chunks_skipped: int
 
 
-def load_documents(session: Session, settings: Settings) -> DocumentLoadStats:
+def load_documents(
+    session: Session, settings: Settings, mode_names: Mapping[str, str]
+) -> DocumentLoadStats:
     """Build every document from the stored entities and embed the ones that changed.
 
     Args:
@@ -972,6 +1076,8 @@ def load_documents(session: Session, settings: Settings) -> DocumentLoadStats:
             The entity and value loaders must have run first, because every
             document hangs off an entity row by foreign key.
         settings: Application settings providing embedding_model_name.
+        mode_names: Mapping of game-mode enum to the name Riot documents for it,
+            as load_game_mode_names builds it.
 
     Returns:
         DocumentLoadStats counting what was built, what changed and how many
@@ -981,7 +1087,7 @@ def load_documents(session: Session, settings: Settings) -> DocumentLoadStats:
         KeyError: If an item is available on a map id MAP_NAMES does not name.
         sqlalchemy.exc.SQLAlchemyError: If any row violates the schema.
     """
-    documents = build_documents(session)
+    documents = build_documents(session, mode_names)
     changed = _upsert_documents(session, documents)
     stored_chunks = session.execute(select(func.count()).select_from(Chunk)).scalar_one()
     removed = 0

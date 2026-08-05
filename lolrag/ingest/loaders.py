@@ -36,7 +36,7 @@ from lolrag.db.models import (
     Story,
     SummonerSpell,
 )
-from lolrag.fetch import cdragon, cdragon_bin, ddragon, universe
+from lolrag.fetch import cdragon, cdragon_bin, ddragon, riot_static, universe
 from lolrag.fetch.client import FetchClient
 from lolrag.ingest.associations import AssociationStats, load_associations
 from lolrag.ingest.identifiers import PASSIVE_SLOT, SPELL_SLOTS, universe_slug
@@ -53,6 +53,12 @@ PLACEHOLDER_SPELL_SUFFIX = "Placeholder"
 
 DYNAMIC_DESCRIPTION_KEY = "dynamicDescription"
 MODES_KEY = "modes"
+
+GAME_MODE_KEY = "gameMode"
+GAME_MODE_DESCRIPTION_KEY = "description"
+GAME_MODE_DESCRIPTION_SUFFIX = " games"
+
+CURATED_GAME_MODE_NAMES = {"CHERRY": "Arena"}
 
 ITEM_RECORD_PREFIX = "Items/"
 CDRAGON_VARIANT_OF_FIELD = "{4f958685}"
@@ -473,6 +479,43 @@ def build_summoner_spells(payload: dict) -> list[SummonerSpell]:
     return spells
 
 
+def game_mode_names(payload: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    """Read the readable name Riot documents for each game-mode enum.
+
+    Args:
+        payload: Parsed gameModes.json body, a list of records each carrying a
+            "gameMode" enum and a "description" naming it.
+
+    Returns:
+        Mapping of game-mode enum to its readable name, which is Riot's own
+        description with a trailing " games" removed so "ARAM games" reads as
+        "ARAM" in a list of modes. Nothing else in the payload is edited, and an
+        enum this mapping omits is one Riot documents nowhere, which is the only
+        first-party evidence that separates a real mode from engine scaffolding
+        such as WIPMODEWIP3.
+
+        CURATED_GAME_MODE_NAMES is then merged over the payload. It holds one
+        entry, CHERRY to "Arena", and it is an inference across sibling files
+        rather than a published mapping: gameModes.json names 22 modes and
+        CHERRY is not among them, but maps.json calls map 30 "Rings of Wrath"
+        with the note "Arena map", queues.json 1700 and 1710 describe themselves
+        as Arena, and MAP_NAMES in the document builder already names map 30
+        Arena on that same evidence. It is curated because Arena is a mode
+        players queue into, so dropping it as undocumented would title the
+        Arena-only Flash identically to the real Flash and leave two documents
+        with one title contradicting each other on cooldown. Nothing else is
+        curated: SNOWURF and the rest stay undocumented and keep falling back to
+        their raw enum only where a title would otherwise collide.
+    """
+    names: dict[str, str] = {}
+    for record in payload:
+        description = record[GAME_MODE_DESCRIPTION_KEY]
+        if description.lower().endswith(GAME_MODE_DESCRIPTION_SUFFIX):
+            description = description[: -len(GAME_MODE_DESCRIPTION_SUFFIX)]
+        names[record[GAME_MODE_KEY]] = description.strip()
+    return names | CURATED_GAME_MODE_NAMES
+
+
 def build_champion_stats(
     champion_list: dict, universe_payloads: Mapping[str, Any]
 ) -> list[ChampionStats]:
@@ -480,7 +523,8 @@ def build_champion_stats(
 
     Args:
         champion_list: Parsed Data Dragon champion.json body, whose "data" key
-            maps champion id to a summary carrying a 20-field "stats" object.
+            maps champion id to a summary carrying a 20-field "stats" object and
+            the "partype" naming the champion's primary resource.
         universe_payloads: Mapping of Universe champion slug to that champion's
             parsed Universe payload. Only its keys are read, as the roster the
             stats rows must key against.
@@ -490,7 +534,11 @@ def build_champion_stats(
         roster. The slug is derived the same way build_champions derives it, so
         the two agree by construction; a Data Dragon champion with no Universe
         page would violate the foreign key and is skipped with a warning
-        instead.
+        instead. partype is read from the champion summary rather than the stats
+        object, which is where the source publishes it, and is stored verbatim:
+        the "None" and empty-string values are the source's own statement that
+        the champion pays no resource, and the mp value it publishes beside them
+        is a sentinel no renderer may read.
     """
     ddragon_id_by_slug = {
         universe_slug(ddragon_id): ddragon_id for ddragon_id in champion_list["data"]
@@ -500,10 +548,12 @@ def build_champion_stats(
         if slug not in universe_payloads:
             logger.warning("champion %s has no Universe page, skipping its stats", ddragon_id)
             continue
-        stats = champion_list["data"][ddragon_id]["stats"]
+        summary = champion_list["data"][ddragon_id]
+        stats = summary["stats"]
         rows.append(
             ChampionStats(
                 champion_slug=slug,
+                partype=summary["partype"],
                 hp=float(stats["hp"]),
                 hp_per_level=float(stats["hpperlevel"]),
                 mp=float(stats["mp"]),
@@ -661,6 +711,34 @@ def _assign_existing_ability_ids(session: Session, abilities: Sequence[Ability])
     }
     for ability in abilities:
         ability.id = stored.get((ability.champion_slug, ability.slot))
+
+
+async def load_game_mode_names(client: FetchClient, settings: Settings) -> dict[str, str]:
+    """Load the game-mode enum to name mapping the document stage renders modes with.
+
+    Args:
+        client: Open FetchClient serving the request, from the on-disk cache
+            when it is warm.
+        settings: Application settings providing riot_static_base_url and
+            cache_dir.
+
+    Returns:
+        Mapping of game-mode enum to readable name, Riot's documented modes plus
+        the curated entries game_mode_names merges over them. Nothing is
+        persisted: no entity refers to a game mode, so the mapping is a lookup
+        the document builder is handed rather than a table, and the raw enums
+        stay on the summoner spell rows exactly as Data Dragon publishes them.
+
+    Raises:
+        httpx.HTTPStatusError: If the request fails after its retries.
+    """
+    names = game_mode_names(await riot_static.fetch_game_modes(client, settings))
+    logger.info(
+        "naming %d game modes, %d of them curated rather than documented",
+        len(names),
+        len(CURATED_GAME_MODE_NAMES),
+    )
+    return names
 
 
 async def load_all(session: Session, client: FetchClient, settings: Settings) -> LoadStats:

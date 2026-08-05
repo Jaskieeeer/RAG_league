@@ -22,8 +22,9 @@ CDRAGON_CHAMPION_PATH = "/latest/plugins/rcp-be-lol-game-data/global/default/v1/
 CDRAGON_BIN_PATH = "/latest/game/data/characters"
 CDRAGON_ITEM_BIN_PATH = "/latest/game/items.cdtb.bin.json"
 UNIVERSE_PATH = "/v1/en_us"
+RIOT_GAME_MODES_PATH = "/docs/lol/gameModes.json"
 
-TOTAL_REQUESTS = 19
+TOTAL_REQUESTS = 20
 
 
 # ---------- fixture corpus ----------
@@ -66,6 +67,7 @@ def build_routes() -> dict[str, Any]:
         f"{DDRAGON_DATA_PATH}/runesReforged.json": [],
         f"{DDRAGON_DATA_PATH}/summoner.json": {"data": {}},
         CDRAGON_ITEM_BIN_PATH: {"entries": {}},
+        RIOT_GAME_MODES_PATH: [{"gameMode": "CLASSIC", "description": "Classic games"}],
         f"{UNIVERSE_PATH}/search/index.json": {
             "champions": [{"slug": champion_id.lower()} for champion_id in CHAMPION_IDS],
             "factions": [{"slug": slug} for slug in FACTION_SLUGS],
@@ -170,6 +172,7 @@ async def test_warm_cache_counts_every_document_kind(
         universe_champions=2,
         universe_factions=2,
         universe_stories=3,
+        riot_game_modes=1,
         cache_hits=0,
         cache_misses=TOTAL_REQUESTS,
     )

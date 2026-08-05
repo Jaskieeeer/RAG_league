@@ -173,10 +173,17 @@ class ChampionStats(Base):
     Args:
         champion_slug: Foreign key to the champion, primary key, cascades on
             delete.
+        partype: Name Data Dragon publishes for the champion's primary resource,
+            e.g. "Mana", "Fury" or "Blood Well"; the literal "None" or an empty
+            string for the champions that pay no resource at all. This column is
+            the only authority on whether a resource exists, because mp carries
+            a sentinel for several champions it says have none: 10000 for Viego
+            and 60 for Belveth.
         hp: Base health.
         hp_per_level: Published health growth per level.
-        mp: Base value of the champion's primary resource, 0 for champions that
-            use none.
+        mp: Base value of the champion's primary resource, meaningful only when
+            partype names one; a champion whose partype names a resource with no
+            published maximum carries 0 here.
         mp_per_level: Published primary-resource growth per level.
         move_speed: Base movement speed.
         armor: Base armor.
@@ -192,9 +199,14 @@ class ChampionStats(Base):
         crit: Base critical strike chance.
         crit_per_level: Published critical strike chance growth per level.
         attack_damage: Base attack damage.
-        attack_damage_per_level: Published attack damage growth per level.
-        attack_speed: Base attack speed.
-        attack_speed_per_level: Published attack speed growth per level.
+        attack_damage_per_level: Published attack damage growth per level, which
+            Data Dragon reports as 0 for every champion in 16.14.1 although
+            champions demonstrably do gain attack damage per level. It is stored
+            as published and deliberately not rendered into any document.
+        attack_speed: Base attack speed, a ratio.
+        attack_speed_per_level: Published attack speed growth per level, a
+            percentage of the base ratio rather than a second ratio: 2.5 means
+            2.5%, so it must never be added to attack_speed as it stands.
     """
 
     __tablename__ = "champion_stats"
@@ -202,6 +214,7 @@ class ChampionStats(Base):
     champion_slug: Mapped[str] = mapped_column(
         ForeignKey("champions.slug", ondelete="CASCADE"), primary_key=True
     )
+    partype: Mapped[str] = mapped_column(String(32))
     hp: Mapped[float] = mapped_column(Float)
     hp_per_level: Mapped[float] = mapped_column(Float)
     mp: Mapped[float] = mapped_column(Float)
